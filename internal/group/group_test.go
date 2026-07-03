@@ -3,7 +3,7 @@ package group
 import (
 	"testing"
 
-	"memhogs/internal/proc"
+	"github.com/cicerothoma/memhogs/internal/proc"
 )
 
 const MiB = 1 << 20

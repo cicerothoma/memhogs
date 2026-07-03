@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"memhogs/internal/group"
-	"memhogs/internal/proc"
+	"github.com/cicerothoma/memhogs/internal/group"
+	"github.com/cicerothoma/memhogs/internal/proc"
 )
 
 type Opts struct {

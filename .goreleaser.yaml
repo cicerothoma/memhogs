@@ -1,0 +1,42 @@
+version: 2
+project_name: memhogs
+
+# Releases run locally on macOS (`goreleaser release --clean`): the darwin
+# builds need cgo for libproc (memory footprint), which cannot be
+# cross-compiled from Linux CI; the linux builds are pure Go and cross-compile
+# fine from here.
+builds:
+  - id: darwin
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=1]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+  - id: linux
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+
+archives:
+  - formats: [tar.gz]
+
+nfpms:
+  - ids: [linux]
+    formats: [deb, rpm, apk]
+    maintainer: Collins Thomas <thomascollins582@gmail.com>
+    homepage: https://github.com/cicerothoma/memhogs
+    description: Apps and services by memory use, grouped by process tree.
+    license: MIT
+
+brews:
+  - repository:
+      owner: cicerothoma
+      name: homebrew-tap
+    homepage: https://github.com/cicerothoma/memhogs
+    description: Apps and services by memory use, grouped by process tree.
+    license: MIT
+    test: |
+      system "#{bin}/memhogs", "--version"
+
+changelog:
+  use: github-native

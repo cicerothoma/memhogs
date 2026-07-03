@@ -31,12 +31,37 @@ memhogs --rss           # ps/top-comparable RSS instead of the fair metric
 memhogs cursor          # only groups matching "cursor"
 ```
 
-## Building
+## Installing
+
+No Go required — prebuilt binaries for macOS and Linux (amd64/arm64):
+
+```
+# Homebrew (macOS and Linux)
+brew install cicerothoma/tap/memhogs
+
+# Debian/Ubuntu — grab the .deb from the latest release, then:
+sudo dpkg -i memhogs_*.deb
+
+# Fedora/RHEL
+sudo rpm -i memhogs-*.rpm
+
+# Alpine
+sudo apk add --allow-untrusted memhogs_*.apk
+
+# Or download a tarball from https://github.com/cicerothoma/memhogs/releases
+```
+
+With Go installed, `go install github.com/cicerothoma/memhogs@latest` works too.
+
+## Building from source
 
 ```
 go build -o memhogs .
 GOOS=linux GOARCH=amd64 go build -o memhogs-linux .   # cross-compile
 ```
+
+Releases are cut locally with `goreleaser release --clean` (the macOS build
+needs cgo, so releases run on a Mac).
 
 No dependencies beyond the Go standard library. macOS and Linux. The macOS
 build uses cgo (Apple's libproc) to read memory footprint; a `CGO_ENABLED=0`

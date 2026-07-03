@@ -11,24 +11,33 @@ import (
 	"strings"
 	"time"
 
-	"memhogs/internal/group"
-	"memhogs/internal/proc"
-	"memhogs/internal/render"
+	"github.com/cicerothoma/memhogs/internal/group"
+	"github.com/cicerothoma/memhogs/internal/proc"
+	"github.com/cicerothoma/memhogs/internal/render"
 )
+
+// version is stamped by the release build (goreleaser -X main.version=...).
+var version = "dev"
 
 func main() {
 	var (
-		top      = flag.Int("top", 0, "show only the top N entries")
-		flat     = flag.Bool("flat", false, "list individual processes instead of grouping by app")
-		jsonOut  = flag.Bool("json", false, "emit JSON")
-		tree     = flag.Bool("tree", false, "expand every member process (default shows top 5 per group)")
-		compact  = flag.Bool("compact", false, "one row per group, no member processes")
-		watch    = flag.Bool("watch", false, "refresh continuously")
-		interval = flag.Duration("interval", 2*time.Second, "refresh interval for --watch")
-		rss      = flag.Bool("rss", false, "use RSS (ps/top-comparable) instead of the fair-share metric")
+		showVersion = flag.Bool("version", false, "print version and exit")
+		top         = flag.Int("top", 0, "show only the top N entries")
+		flat        = flag.Bool("flat", false, "list individual processes instead of grouping by app")
+		jsonOut     = flag.Bool("json", false, "emit JSON")
+		tree        = flag.Bool("tree", false, "expand every member process (default shows top 5 per group)")
+		compact     = flag.Bool("compact", false, "one row per group, no member processes")
+		watch       = flag.Bool("watch", false, "refresh continuously")
+		interval    = flag.Duration("interval", 2*time.Second, "refresh interval for --watch")
+		rss         = flag.Bool("rss", false, "use RSS (ps/top-comparable) instead of the fair-share metric")
 	)
 	flag.Usage = usage
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("memhogs " + version)
+		return
+	}
 
 	filter := strings.ToLower(strings.Join(flag.Args(), " "))
 	if *flat && *tree {

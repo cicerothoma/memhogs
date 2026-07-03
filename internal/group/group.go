@@ -9,7 +9,7 @@ package group
 import (
 	"sort"
 
-	"memhogs/internal/proc"
+	"github.com/cicerothoma/memhogs/internal/proc"
 )
 
 type Kind int

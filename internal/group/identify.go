@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"memhogs/internal/proc"
+	"github.com/cicerothoma/memhogs/internal/proc"
 )
 
 // DarwinHooks identifies applications by the outermost .app bundle in the
