@@ -51,6 +51,10 @@ Prebuilt binaries, no Go required:
 # Homebrew (macOS and Linux)
 brew install cicerothoma/tap/memhogs
 
+# or add the tap once, then use the short name from then on
+brew tap cicerothoma/tap
+brew install memhogs
+
 # Debian/Ubuntu: download the .deb from the releases page, then
 sudo dpkg -i memhogs_*.deb
 
