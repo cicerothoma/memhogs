@@ -11,16 +11,27 @@ import (
 )
 
 type Opts struct {
-	Top      int    // show only the first N groups/processes; 0 = all
-	Tree     bool   // list member processes under each group
-	TotalMem uint64 // physical RAM in bytes; enables the %MEM column when > 0
+	Top        int                    // show only the first N groups/processes; 0 = all
+	Tree       bool                   // list member processes under multi-process groups
+	MaxMembers int                    // member rows per group before folding into "… N more"; 0 = all
+	TotalMem   uint64                 // physical RAM in bytes; enables the %MEM column when > 0
+	MemOf      func(proc.Proc) uint64 // per-process metric selector; nil = RSS
+	Metric     string                 // metric name for the footer: "footprint", "pss", or "rss"
+	Fallback   int                    // processes counted via RSS because the metric was unreadable
 }
 
-func (o Opts) pct(rss uint64) string {
+func (o Opts) mem(p proc.Proc) uint64 {
+	if o.MemOf == nil {
+		return p.RSS
+	}
+	return o.MemOf(p)
+}
+
+func (o Opts) pct(mem uint64) string {
 	if o.TotalMem == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%.1f%%", float64(rss)/float64(o.TotalMem)*100)
+	return fmt.Sprintf("%.1f%%", float64(mem)/float64(o.TotalMem)*100)
 }
 
 func Table(w io.Writer, groups []group.Group, o Opts) {
@@ -30,25 +41,37 @@ func Table(w io.Writer, groups []group.Group, o Opts) {
 	}
 	fmt.Fprintf(w, "%10s  %6s  %9s  %s\n", "MEMORY", "%MEM", "PROCESSES", "NAME")
 	for _, g := range shown {
-		fmt.Fprintf(w, "%10s  %6s  %9d  %s\n", HumanBytes(g.RSS), o.pct(g.RSS), len(g.Procs), g.Name)
-		if o.Tree {
-			for i, p := range g.Procs {
+		fmt.Fprintf(w, "%10s  %6s  %9d  %s\n", HumanBytes(g.Mem), o.pct(g.Mem), len(g.Procs), g.Name)
+		// A single member would just repeat the group row, so only expand real groups.
+		if o.Tree && len(g.Procs) > 1 {
+			members := g.Procs
+			if o.MaxMembers > 0 && o.MaxMembers < len(members) {
+				members = members[:o.MaxMembers]
+			}
+			for i, p := range members {
 				branch := "├─"
-				if i == len(g.Procs)-1 {
+				if i == len(members)-1 && len(members) == len(g.Procs) {
 					branch = "└─"
 				}
-				fmt.Fprintf(w, "%10s  %6s  %9s  %s %s  %s [%d]\n", "", "", "", branch, HumanBytes(p.RSS), p.Name, p.PID)
+				fmt.Fprintf(w, "%10s  %6s  %9s  %s %s  %s [%d]\n", "", "", "", branch, HumanBytes(o.mem(p)), p.Name, p.PID)
+			}
+			if rest := g.Procs[len(members):]; len(rest) > 0 {
+				var restMem uint64
+				for _, p := range rest {
+					restMem += o.mem(p)
+				}
+				fmt.Fprintf(w, "%10s  %6s  %9s  └─ … %d more (%s)\n", "", "", "", len(rest), HumanBytes(restMem))
 			}
 		}
 	}
 	var total uint64
 	nprocs := 0
 	for _, g := range groups {
-		total += g.RSS
+		total += g.Mem
 		nprocs += len(g.Procs)
 	}
-	fmt.Fprintf(w, "\n%d of %d groups · %d processes · total %s%s\n",
-		len(shown), len(groups), nprocs, HumanBytes(total), footerSuffix(o))
+	fmt.Fprintf(w, "\n%d of %d groups · %d processes · total %s%s\n%s\n",
+		len(shown), len(groups), nprocs, HumanBytes(total), ramSuffix(o), metricLine(o))
 }
 
 func FlatTable(w io.Writer, procs []proc.Proc, o Opts) {
@@ -58,26 +81,46 @@ func FlatTable(w io.Writer, procs []proc.Proc, o Opts) {
 	}
 	fmt.Fprintf(w, "%10s  %6s  %7s  %s\n", "MEMORY", "%MEM", "PID", "NAME")
 	for _, p := range shown {
-		fmt.Fprintf(w, "%10s  %6s  %7d  %s\n", HumanBytes(p.RSS), o.pct(p.RSS), p.PID, p.Name)
+		fmt.Fprintf(w, "%10s  %6s  %7d  %s\n", HumanBytes(o.mem(p)), o.pct(o.mem(p)), p.PID, p.Name)
 	}
 	var total uint64
 	for _, p := range procs {
-		total += p.RSS
+		total += o.mem(p)
 	}
-	fmt.Fprintf(w, "\n%d of %d processes · total %s%s\n",
-		len(shown), len(procs), HumanBytes(total), footerSuffix(o))
+	fmt.Fprintf(w, "\n%d of %d processes · total %s%s\n%s\n",
+		len(shown), len(procs), HumanBytes(total), ramSuffix(o), metricLine(o))
 }
 
-func footerSuffix(o Opts) string {
+func ramSuffix(o Opts) string {
 	if o.TotalMem == 0 {
-		return " (RSS; shared memory counted per process)"
+		return ""
 	}
-	return fmt.Sprintf(" of %s RAM (RSS; shared memory counted per process)", HumanBytes(o.TotalMem))
+	return fmt.Sprintf(" of %s RAM", HumanBytes(o.TotalMem))
+}
+
+func metricLine(o Opts) string {
+	switch o.Metric {
+	case "footprint":
+		s := "metric: memory footprint (same as Activity Monitor)"
+		if o.Fallback > 0 {
+			s += fmt.Sprintf("; %d unreadable processes counted via RSS", o.Fallback)
+		}
+		return s
+	case "pss":
+		s := "metric: PSS (shared pages charged fractionally)"
+		if o.Fallback > 0 {
+			s += fmt.Sprintf("; %d unreadable processes counted via RSS", o.Fallback)
+		}
+		return s
+	default:
+		return "metric: RSS (shared memory counted once per process, so totals overstate)"
+	}
 }
 
 type jsonProc struct {
 	PID      int    `json:"pid"`
 	PPID     int    `json:"ppid"`
+	MemBytes uint64 `json:"mem_bytes"`
 	RSSBytes uint64 `json:"rss_bytes"`
 	Name     string `json:"name"`
 	Path     string `json:"path,omitempty"`
@@ -86,10 +129,14 @@ type jsonProc struct {
 type jsonGroup struct {
 	Name       string     `json:"name"`
 	Kind       string     `json:"kind"`
-	RSSBytes   uint64     `json:"rss_bytes"`
-	RSS        string     `json:"rss"`
+	MemBytes   uint64     `json:"mem_bytes"`
+	Mem        string     `json:"mem"`
 	PercentRAM float64    `json:"percent_of_ram,omitempty"`
 	Procs      []jsonProc `json:"procs"`
+}
+
+func (o Opts) jsonProc(p proc.Proc) jsonProc {
+	return jsonProc{PID: p.PID, PPID: p.PPID, MemBytes: o.mem(p), RSSBytes: p.RSS, Name: p.Name, Path: p.Path}
 }
 
 func JSON(w io.Writer, groups []group.Group, o Opts) error {
@@ -97,16 +144,17 @@ func JSON(w io.Writer, groups []group.Group, o Opts) error {
 		groups = groups[:o.Top]
 	}
 	out := struct {
+		Metric        string      `json:"metric"`
 		TotalRAMBytes uint64      `json:"total_ram_bytes,omitempty"`
 		Groups        []jsonGroup `json:"groups"`
-	}{TotalRAMBytes: o.TotalMem, Groups: make([]jsonGroup, len(groups))}
+	}{Metric: o.Metric, TotalRAMBytes: o.TotalMem, Groups: make([]jsonGroup, len(groups))}
 	for i, g := range groups {
-		jg := jsonGroup{Name: g.Name, Kind: g.Kind.String(), RSSBytes: g.RSS, RSS: HumanBytes(g.RSS), Procs: make([]jsonProc, len(g.Procs))}
+		jg := jsonGroup{Name: g.Name, Kind: g.Kind.String(), MemBytes: g.Mem, Mem: HumanBytes(g.Mem), Procs: make([]jsonProc, len(g.Procs))}
 		if o.TotalMem > 0 {
-			jg.PercentRAM = roundPct(float64(g.RSS) / float64(o.TotalMem) * 100)
+			jg.PercentRAM = roundPct(float64(g.Mem) / float64(o.TotalMem) * 100)
 		}
 		for j, p := range g.Procs {
-			jg.Procs[j] = jsonProc{PID: p.PID, PPID: p.PPID, RSSBytes: p.RSS, Name: p.Name, Path: p.Path}
+			jg.Procs[j] = o.jsonProc(p)
 		}
 		out.Groups[i] = jg
 	}
@@ -120,11 +168,12 @@ func JSONFlat(w io.Writer, procs []proc.Proc, o Opts) error {
 		procs = procs[:o.Top]
 	}
 	out := struct {
+		Metric        string     `json:"metric"`
 		TotalRAMBytes uint64     `json:"total_ram_bytes,omitempty"`
 		Procs         []jsonProc `json:"procs"`
-	}{TotalRAMBytes: o.TotalMem, Procs: make([]jsonProc, len(procs))}
+	}{Metric: o.Metric, TotalRAMBytes: o.TotalMem, Procs: make([]jsonProc, len(procs))}
 	for i, p := range procs {
-		out.Procs[i] = jsonProc{PID: p.PID, PPID: p.PPID, RSSBytes: p.RSS, Name: p.Name, Path: p.Path}
+		out.Procs[i] = o.jsonProc(p)
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

@@ -20,12 +20,14 @@ Born from a frustrating session with raw `ps`:
 ## Usage
 
 ```
-memhogs                 # grouped table, sorted by memory descending
-memhogs --tree          # show member processes under each group
+memhogs                 # groups sorted by memory, top 5 members shown per group
+memhogs --tree          # expand every member process, not just the top 5
+memhogs --compact       # one row per group, no member breakdown
 memhogs --flat          # per-process view, no grouping
 memhogs --top 10        # only the 10 largest
 memhogs --json          # machine-readable output
 memhogs --watch         # refresh every 2s (--interval 5s to change)
+memhogs --rss           # ps/top-comparable RSS instead of the fair metric
 memhogs cursor          # only groups matching "cursor"
 ```
 
@@ -36,19 +38,33 @@ go build -o memhogs .
 GOOS=linux GOARCH=amd64 go build -o memhogs-linux .   # cross-compile
 ```
 
-No dependencies beyond the Go standard library. macOS and Linux.
+No dependencies beyond the Go standard library. macOS and Linux. The macOS
+build uses cgo (Apple's libproc) to read memory footprint; a `CGO_ENABLED=0`
+build still works but falls back to RSS for every process.
+
+## Memory metrics
+
+By default memhogs reports a **fair-share metric**, so summing a group's
+processes doesn't double-count shared pages:
+
+- **macOS:** physical memory footprint via `proc_pid_rusage` — the same
+  number Activity Monitor's Memory column shows.
+- **Linux:** PSS from `/proc/<pid>/smaps_rollup`, which charges each shared
+  page fractionally to the processes sharing it.
+
+Processes the OS won't let us inspect (typically other users' processes;
+run as root/sudo for full coverage) fall back to RSS per process — the
+footer reports how many. `--rss` switches everything to plain RSS when you
+want numbers comparable to `ps`/`top`; note RSS counts shared pages once
+*per process*, so grouped totals overstate real usage.
 
 ## Caveats
 
-- **Memory metric is RSS.** Pages shared between processes (frameworks,
-  Electron binaries mapped into every renderer) are counted once *per
-  process*, so grouped totals can overstate real usage by roughly 10–30%
-  for multi-process apps. Treat the numbers as "what `ps`/`top` would say,
-  summed", not as exact physical footprint.
 - Memory fluctuates: totals can shift by gigabytes between runs minutes
   apart. Use `--watch` to see movement.
-- On Linux, executable paths of other users' processes aren't readable
-  without root; grouping falls back to cgroup units and comm names.
+- On Linux, executable paths and PSS of other users' processes aren't
+  readable without root; grouping falls back to cgroup units and comm
+  names, and memory falls back to RSS.
 
 ## How grouping works
 

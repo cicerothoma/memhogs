@@ -73,5 +73,12 @@ func readProc(pid int, pageSize uint64) (Proc, bool) {
 	if cg, err := os.ReadFile(dir + "/cgroup"); err == nil {
 		p.Unit = cgroupUnit(string(cg))
 	}
+
+	// PSS charges shared pages fractionally, so sums don't double-count.
+	// Readable only for the caller's own processes (all of them as root);
+	// missing on pre-4.14 kernels. 0 means "fall back to RSS".
+	if sm, err := os.ReadFile(dir + "/smaps_rollup"); err == nil {
+		p.Fair = parsePss(string(sm))
+	}
 	return p, true
 }

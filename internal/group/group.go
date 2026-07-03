@@ -33,7 +33,7 @@ func (k Kind) String() string {
 type Group struct {
 	Name  string
 	Kind  Kind
-	RSS   uint64
+	Mem   uint64 // sum of the selected metric over Procs
 	Procs []proc.Proc
 }
 
@@ -49,9 +49,10 @@ type Hooks struct {
 
 const maxWalk = 128 // parent chains are shallow; this only guards PPID cycles
 
-// Build assigns every process to a group and returns groups sorted by RSS
-// descending (ties by name). Zero-RSS processes are dropped as noise.
-func Build(procs []proc.Proc, h Hooks) []Group {
+// Build assigns every process to a group and returns groups sorted by the
+// selected metric descending (ties by name). Zero-memory processes are
+// dropped as noise.
+func Build(procs []proc.Proc, h Hooks, mem func(proc.Proc) uint64) []Group {
 	byPID := make(map[int]proc.Proc, len(procs))
 	for _, p := range procs {
 		byPID[p.PID] = p
@@ -64,12 +65,12 @@ func Build(procs []proc.Proc, h Hooks) []Group {
 			g = &Group{Name: name, Kind: kind}
 			groups[key] = g
 		}
-		g.RSS += p.RSS
+		g.Mem += mem(p)
 		g.Procs = append(g.Procs, p)
 	}
 
 	for _, p := range procs {
-		if p.RSS == 0 {
+		if mem(p) == 0 {
 			continue
 		}
 		name, kind := resolve(p, byPID, h)
@@ -78,12 +79,12 @@ func Build(procs []proc.Proc, h Hooks) []Group {
 
 	out := make([]*Group, 0, len(groups))
 	for _, g := range groups {
-		sort.Slice(g.Procs, func(i, j int) bool { return g.Procs[i].RSS > g.Procs[j].RSS })
+		sort.Slice(g.Procs, func(i, j int) bool { return mem(g.Procs[i]) > mem(g.Procs[j]) })
 		out = append(out, g)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].RSS != out[j].RSS {
-			return out[i].RSS > out[j].RSS
+		if out[i].Mem != out[j].Mem {
+			return out[i].Mem > out[j].Mem
 		}
 		return out[i].Name < out[j].Name
 	})

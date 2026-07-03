@@ -15,7 +15,14 @@ func Snapshot() ([]Proc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parsePS(out)
+	procs, err := parsePS(out)
+	if err != nil {
+		return nil, err
+	}
+	for i := range procs {
+		procs[i].Fair = footprint(procs[i].PID)
+	}
+	return procs, nil
 }
 
 // TotalMemory returns physical RAM in bytes, or 0 if it can't be determined.

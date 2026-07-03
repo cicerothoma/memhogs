@@ -53,6 +53,27 @@ func cgroupUnit(cg string) string {
 	return filepath.Base(path)
 }
 
+// parsePss extracts the proportional set size in bytes from
+// /proc/pid/smaps_rollup content ("Pss:            123456 kB").
+func parsePss(rollup string) uint64 {
+	for line := range strings.Lines(rollup) {
+		rest, found := strings.CutPrefix(line, "Pss:")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) < 1 {
+			return 0
+		}
+		kb, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			return 0
+		}
+		return kb * 1024
+	}
+	return 0
+}
+
 // parseMemTotal extracts physical RAM in bytes from /proc/meminfo content
 // ("MemTotal:       65486788 kB").
 func parseMemTotal(meminfo string) uint64 {

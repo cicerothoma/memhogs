@@ -2,6 +2,16 @@ package proc
 
 import "testing"
 
+func TestParsePss(t *testing.T) {
+	rollup := "00400000-7fff Rollup\nRss:            123456 kB\nPss:             78901 kB\nPss_Anon:        50000 kB\n"
+	if got := parsePss(rollup); got != 78901*1024 {
+		t.Errorf("parsePss = %d, want %d", got, 78901*1024)
+	}
+	if got := parsePss("Rss: 5 kB\n"); got != 0 {
+		t.Errorf("parsePss without Pss line = %d, want 0", got)
+	}
+}
+
 func TestParseMemTotal(t *testing.T) {
 	tests := []struct {
 		meminfo string

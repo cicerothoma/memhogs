@@ -68,11 +68,11 @@ func names(groups []Group) []string {
 }
 
 func TestDarwinGrouping(t *testing.T) {
-	groups := Build(darwinFixture(), DarwinHooks())
+	groups := Build(darwinFixture(), DarwinHooks(), proc.MemRSS)
 
 	tests := []struct {
 		name  string
-		rss   uint64
+		mem   uint64
 		procs int
 		kind  Kind
 	}{
@@ -86,8 +86,8 @@ func TestDarwinGrouping(t *testing.T) {
 	}
 	for _, tt := range tests {
 		g := byName(t, groups, tt.name)
-		if g.RSS != tt.rss {
-			t.Errorf("%s: RSS = %d MiB, want %d MiB", tt.name, g.RSS/MiB, tt.rss/MiB)
+		if g.Mem != tt.mem {
+			t.Errorf("%s: Mem = %d MiB, want %d MiB", tt.name, g.Mem/MiB, tt.mem/MiB)
 		}
 		if len(g.Procs) != tt.procs {
 			t.Errorf("%s: %d procs, want %d", tt.name, len(g.Procs), tt.procs)
@@ -105,12 +105,26 @@ func TestDarwinGrouping(t *testing.T) {
 }
 
 func TestSortedByRSSDescending(t *testing.T) {
-	groups := Build(darwinFixture(), DarwinHooks())
+	groups := Build(darwinFixture(), DarwinHooks(), proc.MemRSS)
 	for i := 1; i < len(groups); i++ {
-		if groups[i].RSS > groups[i-1].RSS {
+		if groups[i].Mem > groups[i-1].Mem {
 			t.Fatalf("groups not sorted: %s (%d) after %s (%d)",
-				groups[i].Name, groups[i].RSS, groups[i-1].Name, groups[i-1].RSS)
+				groups[i].Name, groups[i].Mem, groups[i-1].Name, groups[i-1].Mem)
 		}
+	}
+}
+
+func TestFairMetricPreferredWithRSSFallback(t *testing.T) {
+	procs := []proc.Proc{
+		// Fair known: charged at Fair, not RSS.
+		{PID: 100, PPID: 1, RSS: 500 * MiB, Fair: 300 * MiB, Path: "/Applications/Dia.app/Contents/MacOS/Dia", Name: "Dia"},
+		// Fair unreadable: falls back to RSS.
+		{PID: 101, PPID: 100, RSS: 200 * MiB, Fair: 0, Path: "/Applications/Dia.app/Contents/Frameworks/Dia Helper.app/Contents/MacOS/Dia Helper", Name: "Dia Helper"},
+	}
+	groups := Build(procs, DarwinHooks(), proc.MemFair)
+	g := byName(t, groups, "Dia")
+	if g.Mem != 500*MiB {
+		t.Errorf("Dia: Mem = %d MiB, want 500 (300 fair + 200 rss fallback)", g.Mem/MiB)
 	}
 }
 
@@ -119,7 +133,7 @@ func TestCycleInParentChainDoesNotHang(t *testing.T) {
 		{PID: 10, PPID: 11, RSS: MiB, Name: "a"},
 		{PID: 11, PPID: 10, RSS: MiB, Name: "b"},
 	}
-	groups := Build(procs, DarwinHooks()) // must terminate
+	groups := Build(procs, DarwinHooks(), proc.MemRSS) // must terminate
 	if len(groups) == 0 {
 		t.Fatal("expected groups from cyclic fixture")
 	}
@@ -144,16 +158,16 @@ func TestLinuxGrouping(t *testing.T) {
 		// Kernel thread: no RSS, dropped.
 		{PID: 2, PPID: 0, RSS: 0, Name: "kthreadd"},
 	}
-	groups := Build(procs, LinuxHooks())
+	groups := Build(procs, LinuxHooks(), proc.MemRSS)
 
-	if g := byName(t, groups, "firefox"); g.RSS != 1000*MiB || len(g.Procs) != 2 || g.Kind != KindApp {
-		t.Errorf("firefox: got RSS %d MiB, %d procs, kind %v", g.RSS/MiB, len(g.Procs), g.Kind)
+	if g := byName(t, groups, "firefox"); g.Mem != 1000*MiB || len(g.Procs) != 2 || g.Kind != KindApp {
+		t.Errorf("firefox: got RSS %d MiB, %d procs, kind %v", g.Mem/MiB, len(g.Procs), g.Kind)
 	}
 	if g := byName(t, groups, "ssh"); g.Kind != KindApp {
 		t.Errorf("ssh: want service identity via ssh.service, got kind %v", g.Kind)
 	}
-	if g := byName(t, groups, "python3"); g.RSS != 2000*MiB || g.Kind != KindStandalone {
-		t.Errorf("python3: want standalone 2000 MiB, got %d MiB kind %v", g.RSS/MiB, g.Kind)
+	if g := byName(t, groups, "python3"); g.Mem != 2000*MiB || g.Kind != KindStandalone {
+		t.Errorf("python3: want standalone 2000 MiB, got %d MiB kind %v", g.Mem/MiB, g.Kind)
 	}
 	for _, g := range groups {
 		if g.Name == "session-3" || g.Name == "session-3.scope" {
