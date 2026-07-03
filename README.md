@@ -1,45 +1,57 @@
 # memhogs
 
-Lists applications and services by memory use, largest first — with helper
-and child processes rolled up into the app that owns them.
-
-Born from a frustrating session with raw `ps`:
-
-- `ps ... -r` sorts by CPU, not memory. memhogs sorts by memory, always.
-- Binary names hide the real app (Warp's executable is literally named
-  `stable`). memhogs resolves the owning `.app` bundle on macOS and the
-  systemd unit on Linux.
-- Electron apps scatter memory across dozens of helpers. memhogs aggregates
-  them by walking the process tree, so a language server spawned by your
-  editor's extension host counts toward the editor even though its own
-  path never mentions the app.
-- Things *you* launch from a terminal do **not** roll into the terminal:
-  the tree walk stops at interactive shells, so your 4 GB python job shows
-  up as `python3`, not as Warp.
-
-## Usage
+A command line tool that shows which applications are using your memory.
+It groups helper and child processes under the app that owns them, so an
+Electron app with 40 renderer processes shows up as one entry with one
+total, not 40 scattered rows.
 
 ```
-memhogs                 # groups sorted by memory, top 5 members shown per group
-memhogs --tree          # expand every member process, not just the top 5
-memhogs --compact       # one row per group, no member breakdown
-memhogs --flat          # per-process view, no grouping
-memhogs --top 10        # only the 10 largest
-memhogs --json          # machine-readable output
-memhogs --watch         # refresh every 2s (--interval 5s to change)
-memhogs --rss           # ps/top-comparable RSS instead of the fair metric
-memhogs cursor          # only groups matching "cursor"
+$ memhogs --top 3
+    MEMORY    %MEM  PROCESSES  NAME
+   7.3 GiB   30.4%         46  Dia
+                               ├─ 870.2 MiB  Dia [12251]
+                               ├─ 540.7 MiB  Browser Helper [12257]
+                               ├─ 481.2 MiB  Browser Helper (Renderer) [16103]
+                               ├─ 430.7 MiB  Browser Helper [12264]
+                               ├─ 360.0 MiB  Browser Helper (Renderer) [12604]
+                               └─ … 41 more (4.7 GiB)
+   2.1 GiB    8.8%         23  Visual Studio Code
+                               ├─ 464.0 MiB  Code Helper (Plugin) [10609]
+                               └─ … 22 more (1.6 GiB)
+ 708.8 MiB    2.9%          6  Slack
+                               ├─ 368.4 MiB  Slack Helper (Renderer) [17182]
+                               └─ … 5 more (340.4 MiB)
+
+3 of 529 groups · 775 processes · total 20.3 GiB of 24.0 GiB RAM
+metric: memory footprint (same as Activity Monitor); 252 unreadable processes counted via RSS
 ```
 
-## Installing
+Compared to `ps` or `top`, memhogs fixes four things:
 
-No Go required — prebuilt binaries for macOS and Linux (amd64/arm64):
+1. Sorted by memory, descending. (`ps axo rss,comm -r` sorts by CPU,
+   which has burned everyone at least once.)
+2. Real application names. Warp's executable is literally called
+   `stable`; memhogs resolves it to Warp through its `.app` bundle on
+   macOS, or through the systemd unit on Linux.
+3. Helpers roll up into their app by walking the process tree, not by
+   matching names. A `tsserver` spawned by your editor's extension host
+   counts toward the editor even though nothing in its path mentions
+   the editor.
+4. Honest numbers. The default metric does not double-count memory
+   shared between processes, which inflates `ps`-style totals by
+   gigabytes on Electron-heavy machines. See "How memory is measured".
 
-```
+Works on macOS and Linux, amd64 and arm64.
+
+## Install
+
+Prebuilt binaries, no Go required:
+
+```sh
 # Homebrew (macOS and Linux)
 brew install cicerothoma/tap/memhogs
 
-# Debian/Ubuntu — grab the .deb from the latest release, then:
+# Debian/Ubuntu: download the .deb from the releases page, then
 sudo dpkg -i memhogs_*.deb
 
 # Fedora/RHEL
@@ -47,60 +59,193 @@ sudo rpm -i memhogs-*.rpm
 
 # Alpine
 sudo apk add --allow-untrusted memhogs_*.apk
-
-# Or download a tarball from https://github.com/cicerothoma/memhogs/releases
 ```
 
-With Go installed, `go install github.com/cicerothoma/memhogs@latest` works too.
+Tarballs for every platform are on the
+[releases page](https://github.com/cicerothoma/memhogs/releases).
+If you have Go installed, `go install github.com/cicerothoma/memhogs@latest`
+also works.
+
+## Usage
+
+### Default view
+
+`memhogs` with no arguments prints every group, largest first. Groups
+with more than one process expand to their five biggest members plus a
+folded remainder line. The %MEM column is the group's share of physical
+RAM, and PROCESSES is how many processes were rolled into that row.
+
+### One row per group
+
+`--compact` drops the member breakdown:
+
+```
+$ memhogs --compact --top 5
+    MEMORY    %MEM  PROCESSES  NAME
+   7.3 GiB   30.4%         46  Dia
+   2.1 GiB    8.8%         23  Visual Studio Code
+ 708.8 MiB    2.9%          6  Slack
+ 475.0 MiB    1.9%          5  VTDecoderXPCService
+ 412.9 MiB    1.7%          6  Warp
+```
+
+### Every member process
+
+`--tree` lifts the five-member cap and shows the full contents of each
+group. Useful when you want to know exactly which renderer inside a
+browser is the 2 GiB one.
+
+### Individual processes, no grouping
+
+`--flat` ranks raw processes the way `top` would, with correct names
+and the fair memory metric:
+
+```
+$ memhogs --flat --top 5
+    MEMORY    %MEM      PID  NAME
+ 870.2 MiB    3.5%    12251  Dia
+ 540.7 MiB    2.2%    12257  Browser Helper
+ 481.2 MiB    2.0%    16103  Browser Helper (Renderer)
+ 464.0 MiB    1.9%    10609  Code Helper (Plugin)
+ 458.1 MiB    1.9%    80624  VTDecoderXPCService
+```
+
+### Filtering
+
+Any extra argument is a case-insensitive substring filter on group
+names (or process names with `--flat`):
+
+```
+$ memhogs messages
+    MEMORY    %MEM  PROCESSES  NAME
+ 263.8 MiB    1.1%          2  Messages
+                               ├─ 247.3 MiB  Messages [4675]
+                               └─ 16.5 MiB  Messages Assistant Extension [7347]
+  13.4 MiB    0.1%          3  MessagesBlastDoorService
+...
+```
+
+### Limiting output
+
+`--top N` truncates to the N largest entries. The footer still counts
+everything, so you can see what the cutoff hid.
+
+### JSON for scripting
+
+`--json` emits the full structure: the metric in use, total RAM, and
+every group with its member processes. Each process carries both the
+fair metric (`mem_bytes`) and plain RSS (`rss_bytes`):
+
+```
+$ memhogs --json --top 1 messages
+{
+  "metric": "footprint",
+  "total_ram_bytes": 25769803776,
+  "groups": [
+    {
+      "name": "Messages",
+      "kind": "app",
+      "mem_bytes": 276662984,
+      "mem": "263.8 MiB",
+      "percent_of_ram": 1.1,
+      "procs": [
+        {
+          "pid": 4675,
+          "ppid": 1,
+          "mem_bytes": 259311752,
+          "rss_bytes": 246022144,
+          "name": "Messages",
+          "path": "/System/Applications/Messages.app/Contents/MacOS/Messages"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`--json --flat` gives a flat process array instead.
+
+### Live view
+
+`--watch` clears the screen and reprints on an interval, two seconds by
+default. Change it with `--interval`, and combine with a filter or
+`--top` to keep an eye on one thing:
+
+```
+memhogs --watch --interval 5s --top 10
+```
+
+### RSS mode
+
+`--rss` switches every view to resident set size, the number `ps` and
+`top` report. Use it when you need to compare against those tools. The
+footer changes to flag the caveat:
+
+```
+metric: RSS (shared memory counted once per process, so totals overstate)
+```
+
+## How memory is measured
+
+The default metric charges shared memory fairly, so summing a group's
+processes does not count the same physical pages more than once:
+
+- On macOS it reads each process's physical memory footprint through
+  `proc_pid_rusage`. This is the number Activity Monitor's Memory
+  column shows, and it includes compressed memory, which RSS misses.
+- On Linux it reads PSS from `/proc/<pid>/smaps_rollup`. A page shared
+  by N processes counts 1/N toward each.
+
+The two metrics disagree with RSS in both directions. On a typical
+Electron-heavy Mac, Docker dropped from 947 MiB (RSS) to 411 MiB
+(footprint) because RSS was double-counting shared framework pages,
+while Dia rose from 6.3 GiB to 6.8 GiB because footprint sees its
+compressed memory.
+
+Processes the OS refuses to expose (typically ones owned by other
+users, including most system daemons) fall back to RSS individually,
+and the footer says how many. Run with sudo for full coverage.
+
+## How grouping works
+
+Each process is assigned to a group by walking up its parent chain:
+
+1. If the process or one of its ancestors is recognized as an
+   application, it joins that group. On macOS recognition means the
+   executable lives inside a `.app` bundle; the outermost bundle wins,
+   so nested helper bundles fold into the parent app. On Linux it means
+   the cgroup is an `app-*.scope` or `*.service` systemd unit.
+2. The walk stops if it would cross an interactive shell (zsh, bash,
+   fish, and friends). Whatever you launched from that shell becomes
+   its own group instead of inflating the terminal app, and its child
+   processes still roll up into it. A 4 GiB training job started from a
+   Warp tab shows up as `python3`, not as Warp.
+3. Anything left stands alone under its own name, and same-named
+   standalone groups merge, so twenty `mdworker_shared` instances make
+   one row.
+
+## Caveats
+
+- Memory moves. Totals can shift by gigabytes between runs minutes
+  apart; use `--watch` to see it happen.
+- On Linux, reading other users' executable paths and PSS requires
+  root. Without it, grouping falls back to cgroup units and comm names,
+  and memory falls back to RSS for those processes.
+- A macOS binary built with `CGO_ENABLED=0` cannot read footprint and
+  reports RSS for everything. The released binaries are built with cgo.
 
 ## Building from source
 
-```
+```sh
 go build -o memhogs .
 GOOS=linux GOARCH=amd64 go build -o memhogs-linux .   # cross-compile
 ```
 
-Releases are cut locally with `goreleaser release --clean` (the macOS build
-needs cgo, so releases run on a Mac).
+There are no dependencies outside the Go standard library. The macOS
+build uses cgo for the footprint syscall. Releases are cut with
+`goreleaser release --clean` on a Mac, since the darwin build cannot be
+cross-compiled with cgo from Linux.
 
-No dependencies beyond the Go standard library. macOS and Linux. The macOS
-build uses cgo (Apple's libproc) to read memory footprint; a `CGO_ENABLED=0`
-build still works but falls back to RSS for every process.
+## License
 
-## Memory metrics
-
-By default memhogs reports a **fair-share metric**, so summing a group's
-processes doesn't double-count shared pages:
-
-- **macOS:** physical memory footprint via `proc_pid_rusage` — the same
-  number Activity Monitor's Memory column shows.
-- **Linux:** PSS from `/proc/<pid>/smaps_rollup`, which charges each shared
-  page fractionally to the processes sharing it.
-
-Processes the OS won't let us inspect (typically other users' processes;
-run as root/sudo for full coverage) fall back to RSS per process — the
-footer reports how many. `--rss` switches everything to plain RSS when you
-want numbers comparable to `ps`/`top`; note RSS counts shared pages once
-*per process*, so grouped totals overstate real usage.
-
-## Caveats
-
-- Memory fluctuates: totals can shift by gigabytes between runs minutes
-  apart. Use `--watch` to see movement.
-- On Linux, executable paths and PSS of other users' processes aren't
-  readable without root; grouping falls back to cgroup units and comm
-  names, and memory falls back to RSS.
-
-## How grouping works
-
-Each process is assigned to a group by walking its parent chain:
-
-1. If the process (or an ancestor) is recognized as an app — its executable
-   lives in a `.app` bundle (macOS) or its cgroup is an `app-*.scope` /
-   `*.service` unit (Linux) — it joins that app's group. The *outermost*
-   bundle wins, so nested helper bundles fold into the parent app.
-2. If the walk would cross an interactive shell (zsh, bash, fish, …), it
-   stops: the topmost process below the shell becomes a standalone group,
-   and its own children roll up into it.
-3. Otherwise the process stands alone under its own name; same-named
-   standalone groups merge (e.g. all `mdworker_shared` instances).
+MIT
