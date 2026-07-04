@@ -255,6 +255,34 @@
   .req-actions .alt { color: #64748f; font-size: 12.5px; }
   .req-actions .alt a { color: #7cb8ff; }
 
+  /* ---------- memory field guide ---------- */
+  .metric-viz {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; margin: 22px 0;
+  }
+  .mv-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 14px; }
+  .mv-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sw-priv { background: var(--green); }
+  .sw-shared { background: var(--blue); }
+  .sw-comp { background: #c084fc; }
+  .sw-off { background: transparent; border: 1px dashed var(--border); }
+  .mv-row { display: grid; grid-template-columns: 84px 1fr; gap: 4px 14px; align-items: center; margin-bottom: 12px; }
+  .mv-name { font: 700 13px ui-monospace, Menlo, Consolas, monospace; text-align: right; }
+  .mv-bar { display: flex; height: 20px; border-radius: 5px; overflow: hidden; gap: 2px; }
+  .mv-bar i { border-radius: 3px; }
+  .mv-bar .sw-off, .mv-bar i.sw-off { border: 1px dashed var(--border); background: transparent; }
+  .mv-bar i.sw-priv { background: var(--green); }
+  .mv-bar i.sw-shared { background: var(--blue); }
+  .mv-bar i.sw-comp { background: #c084fc; }
+  .mv-note { grid-column: 2; font-size: .82rem; color: var(--muted); margin-top: -2px; }
+  .gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-top: 8px; }
+  .g-item { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .g-item h3 { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1rem; color: var(--green); margin-bottom: 6px; }
+  .g-item h3 span { color: var(--muted); font-weight: 400; font-size: .8rem; margin-left: 6px; }
+  .g-item p { color: var(--muted); font-size: .92rem; margin: 0; }
+  .g-item code { font-family: ui-monospace, Menlo, monospace; font-size: .85em; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+
   /* ---------- RAM gauge ---------- */
   #gauge {
     position: fixed; right: 16px; bottom: 16px; z-index: 10;
@@ -363,9 +391,59 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
   </div>
 </section>
 
+<section id="memory-guide">
+  <div class="wrap">
+    <h2><span class="h-mark">04</span>A short field guide to process memory</h2>
+    <p class="lede">"How much memory is that app using?" has several honest answers. Here is what the abbreviations mean and why the tools disagree.</p>
+
+    <p>A process reserves a large range of addresses (its <b>virtual
+    memory</b>), but only some of that is real. Pages it has actually
+    touched sit in RAM; pages it shares with other processes — system
+    libraries, an Electron framework mapped into every renderer — sit in RAM
+    <em>once</em>, no matter how many processes use them; rarely-touched
+    pages get <b>compressed</b> in place or <b>swapped</b> to disk. Every
+    memory metric is just a choice about which of those pieces to count.</p>
+
+    <div class="metric-viz" aria-label="diagram comparing what RSS, PSS and footprint count">
+      <div class="mv-legend">
+        <span><i class="sw sw-priv"></i>private pages</span>
+        <span><i class="sw sw-shared"></i>shared pages</span>
+        <span><i class="sw sw-comp"></i>compressed</span>
+        <span><i class="sw sw-off"></i>not counted</span>
+      </div>
+      <div class="mv-row">
+        <span class="mv-name">RSS</span>
+        <div class="mv-bar"><i class="sw-priv" style="flex:5"></i><i class="sw-shared" style="flex:4"></i><i class="sw-off" style="flex:2"></i></div>
+        <span class="mv-note">counts shared pages in full — in every process</span>
+      </div>
+      <div class="mv-row">
+        <span class="mv-name">PSS</span>
+        <div class="mv-bar"><i class="sw-priv" style="flex:5"></i><i class="sw-shared" style="flex:1.3"></i><i class="sw-off" style="flex:2.7"></i><i class="sw-off" style="flex:2"></i></div>
+        <span class="mv-note">shared pages split fairly: 1/N per process</span>
+      </div>
+      <div class="mv-row">
+        <span class="mv-name">footprint</span>
+        <div class="mv-bar"><i class="sw-priv" style="flex:5"></i><i class="sw-off" style="flex:4"></i><i class="sw-comp" style="flex:2"></i></div>
+        <span class="mv-note">skips shared file-backed pages, sees compressed memory</span>
+      </div>
+    </div>
+
+    <div class="gloss">
+      <div class="g-item"><h3>RSS <span>Resident Set Size</span></h3><p>The pages a process has physically in RAM right now. It's what <code>ps</code> and <code>top</code> report. Honest for one process, misleading when you sum: forty helpers sharing one framework each count it again.</p></div>
+      <div class="g-item"><h3>PSS <span>Proportional Set Size</span></h3><p>Linux's fair version of RSS. A page shared by ten processes counts one tenth toward each, so PSS values sum to the truth. Read from <code>/proc/&lt;pid&gt;/smaps_rollup</code>.</p></div>
+      <div class="g-item"><h3>footprint <span>physical memory footprint</span></h3><p>macOS's answer, and the number Activity Monitor shows. Counts private and compressed memory but not shared framework code, so summing is fair. This is why an idle app can "grow" — its untouched pages compress, and footprint sees them while RSS forgets them.</p></div>
+      <div class="g-item"><h3>%MEM</h3><p>A process's (or in memhogs, a whole app's) share of the machine's physical RAM. The column that answers "is 700 MiB a lot on this box?"</p></div>
+      <div class="g-item"><h3>swap &amp; compression</h3><p>Under pressure the OS evicts cold pages — to a compressed store in RAM (fast) or to disk (slow). Those pages leave RSS entirely, which is how a leaking process can look like it's shrinking.</p></div>
+      <div class="g-item"><h3>virtual size <span>VSZ</span></h3><p>Address space the process has <em>reserved</em>, most of it never touched. Browsers reserve terabytes. Ignore this column; everyone else does.</p></div>
+    </div>
+
+    <p style="margin-top:18px">memhogs defaults to footprint on macOS and PSS on Linux so that group totals don't double-count, and falls back to RSS for processes the OS won't let it inspect. <code>--rss</code> switches everything back when you need numbers comparable with <code>ps</code>.</p>
+  </div>
+</section>
+
 <section id="feature-requests">
   <div class="wrap">
-    <h2><span class="h-mark">04</span>Missing a flag?</h2>
+    <h2><span class="h-mark">05</span>Missing a flag?</h2>
     <p class="lede">Feature requests are tracked as GitHub issues, so you can browse what's been asked for and vote with a thumbs-up. This prompt is a shortcut:</p>
     <div class="req">
       <div class="lbl"># type your idea and hit enter — opens a prefilled GitHub issue</div>
@@ -387,7 +465,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 
 <footer>
   <div class="wrap">
-    <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://github.com/cicerothoma">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a></p>
+    <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://www.collinsthomas.dev/">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a></p>
     <p style="margin-top:6px; font-size:.8rem; opacity:.65">psst — try typing <span class="mono">hog</span></p>
   </div>
 </footer>
