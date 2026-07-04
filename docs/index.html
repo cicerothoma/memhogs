@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memhogs — which apps are eating your memory</title>
+<meta name="description" content="A command line tool for macOS and Linux that shows which applications are using your memory, with helper processes grouped under the app that owns them.">
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #3fb950;
+    --accent-dim: #2ea043;
+    --mem: #d29922;
+    --name: #79c0ff;
+    --code-bg: #161b22;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --panel: #f6f8fa;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --muted: #59636e;
+      --accent: #1a7f37;
+      --accent-dim: #2da44e;
+      --mem: #953800;
+      --name: #0550ae;
+      --code-bg: #f6f8fa;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 72px 0 40px; text-align: center; }
+  header h1 {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 2.6rem;
+    letter-spacing: -1px;
+  }
+  header h1 .dollar { color: var(--accent); }
+  header p.tag { margin-top: 12px; font-size: 1.2rem; color: var(--muted); }
+  .actions { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn.primary { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+  .btn:hover { filter: brightness(1.1); }
+  .install-line {
+    margin: 26px auto 0;
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 18px;
+  }
+  .install-line .dollar { color: var(--accent); user-select: none; }
+  .terminal {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 40px 0;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  }
+  .terminal .bar {
+    background: #161b22;
+    padding: 9px 14px;
+    display: flex;
+    gap: 7px;
+    border-bottom: 1px solid var(--border);
+  }
+  .terminal .bar span { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .terminal .bar .r { background: #ff5f57; } .terminal .bar .y { background: #febc2e; } .terminal .bar .g { background: #28c840; }
+  .terminal pre {
+    padding: 18px 20px;
+    overflow-x: auto;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: #e6edf3;
+  }
+  .terminal .prompt { color: #3fb950; }
+  .terminal .mem { color: #d29922; }
+  .terminal .nm { color: #79c0ff; }
+  .terminal .dim { color: #8b949e; }
+  section { padding: 36px 0; border-top: 1px solid var(--border); }
+  section h2 { font-size: 1.5rem; margin-bottom: 18px; }
+  section p { margin-bottom: 14px; }
+  section p + h3, section pre + h3, section ul + h3 { margin-top: 26px; }
+  h3 { font-size: 1.1rem; margin-bottom: 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 8px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card h3 { margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 0.95rem; margin: 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+  pre.block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    margin-bottom: 14px;
+  }
+  pre.block .c { color: var(--muted); }
+  ul.plain { list-style: none; }
+  ul.plain li { padding-left: 26px; position: relative; margin-bottom: 10px; }
+  ul.plain li::before { content: "✓"; color: var(--accent); position: absolute; left: 4px; font-weight: 700; }
+  .feature-cta {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    margin-top: 10px;
+  }
+  .feature-cta p { color: var(--muted); max-width: 560px; margin: 0 auto 18px; }
+  footer { padding: 40px 0 60px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; text-align: center; }
+  footer a { color: var(--muted); }
+  @media (max-width: 600px) {
+    header { padding: 48px 0 28px; }
+    header h1 { font-size: 2rem; }
+    .terminal pre { font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <h1><span class="dollar">$</span> memhogs</h1>
+  <p class="tag">See which apps are actually eating your memory.</p>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/cicerothoma/memhogs">View on GitHub</a>
+    <a class="btn" href="https://github.com/cicerothoma/memhogs/releases/latest">Download</a>
+    <a class="btn" href="https://github.com/cicerothoma/memhogs/issues/new?template=feature_request.yml">Request a feature</a>
+  </div>
+  <div class="install-line"><span class="dollar">$</span> brew install cicerothoma/tap/memhogs</div>
+</header>
+
+<div class="wrap">
+  <div class="terminal">
+    <div class="bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <pre><span class="prompt">$</span> memhogs --top 3
+    MEMORY    %MEM  PROCESSES  NAME
+   <span class="mem">7.3 GiB</span>   30.4%         46  <span class="nm">Dia</span>
+                               ├─ 870.2 MiB  Dia [12251]
+                               ├─ 540.7 MiB  Browser Helper [12257]
+                               ├─ 481.2 MiB  Browser Helper (Renderer) [16103]
+                               ├─ 430.7 MiB  Browser Helper [12264]
+                               ├─ 360.0 MiB  Browser Helper (Renderer) [12604]
+                               └─ … 41 more (4.7 GiB)
+   <span class="mem">2.1 GiB</span>    8.8%         23  <span class="nm">Visual Studio Code</span>
+                               ├─ 464.0 MiB  Code Helper (Plugin) [10609]
+                               └─ … 22 more (1.6 GiB)
+ <span class="mem">708.8 MiB</span>    2.9%          6  <span class="nm">Slack</span>
+                               ├─ 368.4 MiB  Slack Helper (Renderer) [17182]
+                               └─ … 5 more (340.4 MiB)
+
+<span class="dim">3 of 529 groups · 775 processes · total 20.3 GiB of 24.0 GiB RAM
+metric: memory footprint (same as Activity Monitor); 252 unreadable processes counted via RSS</span></pre>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>The problem</h2>
+    <p>Modern apps are not single processes. A browser or an Electron app
+    (VS Code, Slack, Cursor) spreads its memory across dozens of helper
+    processes with names like <code>Browser Helper (Renderer)</code> or
+    <code>Code Helper (Plugin)</code>. Tools like <code>ps</code>,
+    <code>top</code>, and Activity Monitor list each one separately, so the
+    app that is using 7 GiB of your RAM never appears as a 7 GiB entry
+    anywhere.</p>
+    <p>It gets worse. Some binaries hide their identity entirely (Warp's
+    executable is named <code>stable</code>), the obvious
+    <code>ps</code> incantation sorts by CPU rather than memory, and adding
+    up RSS values double-counts memory shared between processes, inflating
+    totals by gigabytes.</p>
+    <p>memhogs fixes all of that in one command.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it does</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Groups by app</h3>
+        <p>Walks the process tree, so every helper, renderer, and language
+        server rolls up into the application that spawned it. One app, one
+        row, one total.</p>
+      </div>
+      <div class="card">
+        <h3>Real names</h3>
+        <p>Resolves processes to the .app bundle on macOS and the systemd
+        unit on Linux. Warp shows up as Warp, not <code>stable</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Honest numbers</h3>
+        <p>Uses memory footprint on macOS (the Activity Monitor metric) and
+        PSS on Linux, so shared memory is never counted twice. Plain RSS is
+        one flag away.</p>
+      </div>
+      <div class="card">
+        <h3>Respects your terminal</h3>
+        <p>Jobs you launch from a shell stay separate. A 4 GiB training run
+        started in a terminal tab shows up as python3, not as your terminal
+        app.</p>
+      </div>
+      <div class="card">
+        <h3>Scriptable</h3>
+        <p>JSON output with raw byte counts for dashboards and alerts.
+        Filter by name, cap the list, or watch it live.</p>
+      </div>
+      <div class="card">
+        <h3>Small and fast</h3>
+        <p>A single static binary for macOS and Linux, amd64 and arm64.
+        No runtime, no configuration, no dependencies.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>When you'd reach for it</h2>
+    <ul class="plain">
+      <li>Your laptop fan is spinning and you want the culprit ranked, named,
+      and totalled in one command.</li>
+      <li>You are on a remote Linux server where Activity Monitor does not
+      exist and <code>top</code> shows you five hundred anonymous rows.</li>
+      <li>You want to know what quitting your browser would actually give
+      back, including all its renderers.</li>
+      <li>You are watching a suspected memory leak grow with
+      <code>memhogs --watch myapp</code>.</li>
+      <li>You feed <code>memhogs --json</code> into a script that alerts when
+      any one app crosses a threshold.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+    <h3>Homebrew (macOS and Linux)</h3>
+    <pre class="block">brew install cicerothoma/tap/memhogs</pre>
+    <h3>Debian / Ubuntu</h3>
+    <pre class="block"><span class="c"># download the .deb from the latest release, then</span>
+sudo dpkg -i memhogs_*.deb</pre>
+    <h3>Fedora / RHEL / Alpine</h3>
+    <pre class="block">sudo rpm -i memhogs-*.rpm          <span class="c"># Fedora, RHEL</span>
+sudo apk add --allow-untrusted memhogs_*.apk   <span class="c"># Alpine</span></pre>
+    <h3>Go</h3>
+    <pre class="block">go install github.com/cicerothoma/memhogs@latest</pre>
+    <p>Prebuilt tarballs for every platform are on the
+    <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Commands at a glance</h2>
+    <pre class="block">memhogs                 <span class="c"># groups sorted by memory, top 5 members each</span>
+memhogs --tree          <span class="c"># expand every member process</span>
+memhogs --compact       <span class="c"># one row per group</span>
+memhogs --flat          <span class="c"># individual processes, no grouping</span>
+memhogs --top 10        <span class="c"># only the 10 largest</span>
+memhogs --json          <span class="c"># machine-readable output</span>
+memhogs --watch         <span class="c"># live view, refreshes every 2s</span>
+memhogs --rss           <span class="c"># ps/top-comparable numbers</span>
+memhogs slack           <span class="c"># only groups matching "slack"</span></pre>
+    <p>The <a href="https://github.com/cicerothoma/memhogs#usage">README</a>
+    shows example output for each one.</p>
+  </div>
+</section>
+
+<section id="feature-requests">
+  <div class="wrap">
+    <h2>Feature requests</h2>
+    <div class="feature-cta">
+      <p>Missing a flag, a metric, or a platform? Requests are tracked as
+      GitHub issues so you can see what has been asked for, vote with a
+      thumbs-up, and follow progress. Bug reports are welcome through the
+      same door.</p>
+      <a class="btn primary" href="https://github.com/cicerothoma/memhogs/issues/new?template=feature_request.yml">Request a feature</a>
+      <a class="btn" href="https://github.com/cicerothoma/memhogs/issues">Browse open requests</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>MIT licensed. Built by <a href="https://github.com/cicerothoma">Collins Thomas</a>.
+    Source on <a href="https://github.com/cicerothoma/memhogs">GitHub</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

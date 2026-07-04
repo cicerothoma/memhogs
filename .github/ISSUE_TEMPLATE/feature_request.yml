@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a flag, metric, platform, or behavior change
+title: "[feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation where memhogs falls short, not the solution yet.
+      placeholder: I want to see memory usage per Docker container, but containers all show up under one group.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like memhogs to do?
+      placeholder: A --containers flag that groups by container name using the cgroup path.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Both
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround, if any
+      placeholder: Piping --json into jq and matching PIDs against docker inspect.
