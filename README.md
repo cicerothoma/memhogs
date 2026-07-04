@@ -5,6 +5,8 @@ It groups helper and child processes under the app that owns them, so an
 Electron app with 40 renderer processes shows up as one entry with one
 total, not 40 scattered rows.
 
+![memhogs demo: the default tree view, the compact view, and filtering by name](docs/demo.gif)
+
 ```
 $ memhogs --top 3
     MEMORY    %MEM  PROCESSES  NAME
