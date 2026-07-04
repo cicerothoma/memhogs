@@ -3,323 +3,731 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>memhogs — which apps are eating your memory</title>
 <meta name="description" content="A command line tool for macOS and Linux that shows which applications are using your memory, with helper processes grouped under the app that owns them.">
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #3fb950;
-    --accent-dim: #2ea043;
-    --mem: #d29922;
-    --name: #79c0ff;
-    --code-bg: #161b22;
+    --bg: #0a0e14;
+    --panel: #11161f;
+    --panel-2: #171d29;
+    --border: #232b3a;
+    --text: #dfe7f1;
+    --muted: #8494ab;
+    --green: #4ade80;
+    --green-dim: #22b45c;
+    --amber: #fbbf24;
+    --blue: #7cb8ff;
+    --red: #f87171;
+    --chip: #1b2330;
+    --glow: rgba(74, 222, 128, .10);
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg: #ffffff;
-      --panel: #f6f8fa;
-      --border: #d0d7de;
-      --text: #1f2328;
-      --muted: #59636e;
-      --accent: #1a7f37;
-      --accent-dim: #2da44e;
-      --mem: #953800;
-      --name: #0550ae;
-      --code-bg: #f6f8fa;
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --panel-2: #eef2f7;
+      --border: #d8dfe9;
+      --text: #17202c;
+      --muted: #5b6b80;
+      --green: #14883f;
+      --green-dim: #1a9c4b;
+      --amber: #9a6700;
+      --blue: #0b5cad;
+      --red: #c53030;
+      --chip: #eef2f7;
+      --glow: rgba(20, 136, 63, .08);
     }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overflow-x: hidden;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
-  header { padding: 72px 0 40px; text-align: center; }
-  header h1 {
+  ::selection { background: var(--green); color: #08110b; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--blue); }
+  .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* faint address-grid backdrop */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: .14;
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 0%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 0%, transparent 75%);
+  }
+
+  /* ---------- hero ---------- */
+  header { padding: 84px 0 36px; text-align: center; position: relative; }
+  header::before {
+    content: ""; position: absolute; inset: -40px 0 0;
+    background: radial-gradient(ellipse 55% 65% at 50% 12%, var(--glow), transparent 70%);
+    pointer-events: none;
+  }
+  h1.logo {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 2.6rem;
-    letter-spacing: -1px;
+    font-size: clamp(2.4rem, 7vw, 3.6rem);
+    letter-spacing: -2px;
+    display: inline-flex; align-items: center;
   }
-  header h1 .dollar { color: var(--accent); }
-  header p.tag { margin-top: 12px; font-size: 1.2rem; color: var(--muted); }
-  .actions { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  h1 .dollar { color: var(--green); margin-right: .35em; }
+
+  /* the muncher: the "o" chomps memory bits fed in from the right */
+  .muncher { display: inline-flex; align-items: center; position: relative; margin: 0 .04em; }
+  .pac { width: .74em; height: .74em; position: relative; display: inline-block; }
+  .pac::before, .pac::after {
+    content: ""; position: absolute; left: 0; width: 100%; height: 50%;
+    background: var(--green);
+  }
+  .pac::before { top: 0; border-radius: .5em .5em 0 0; transform-origin: 50% 100%; animation: chomp-t .42s ease-in-out infinite alternate; }
+  .pac::after  { bottom: 0; border-radius: 0 0 .5em .5em; transform-origin: 50% 0%; animation: chomp-b .42s ease-in-out infinite alternate; }
+  @keyframes chomp-t { from { transform: rotate(0deg); } to { transform: rotate(-24deg); } }
+  @keyframes chomp-b { from { transform: rotate(0deg); } to { transform: rotate(24deg); } }
+  .bits { position: absolute; left: 100%; top: 50%; width: 3.2em; height: 0; }
+  .bit {
+    position: absolute; top: -0.11em; width: .22em; height: .22em; border-radius: .05em;
+    animation: feed 2.1s linear infinite;
+  }
+  .bit:nth-child(1) { background: var(--amber); animation-delay: 0s; }
+  .bit:nth-child(2) { background: var(--blue);  animation-delay: .7s; }
+  .bit:nth-child(3) { background: var(--red);   animation-delay: 1.4s; }
+  @keyframes feed {
+    0%   { transform: translateX(2.9em) scale(1); opacity: 0; }
+    12%  { opacity: 1; }
+    82%  { transform: translateX(.28em) scale(1); opacity: 1; }
+    100% { transform: translateX(0) scale(0); opacity: 0; }
+  }
+
+  p.tag { margin-top: 14px; font-size: 1.18rem; color: var(--muted); }
+  p.tag b { color: var(--text); font-weight: 600; }
+  .actions { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; position: relative; }
   .btn {
-    display: inline-block;
-    padding: 10px 20px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 600;
-    border: 1px solid var(--border);
-    color: var(--text);
+    display: inline-block; padding: 10px 20px; border-radius: 8px; text-decoration: none;
+    font-weight: 600; border: 1px solid var(--border); color: var(--text);
+    background: var(--panel); transition: transform .15s, box-shadow .15s;
   }
-  .btn.primary { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
-  .btn:hover { filter: brightness(1.1); }
-  .install-line {
-    margin: 26px auto 0;
-    display: inline-block;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.95rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 18px;
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  .btn.primary { background: var(--green-dim); border-color: var(--green-dim); color: #06130b; }
+
+  /* ---------- interactive terminal ---------- */
+  .term-tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 38px 0 0; position: relative; }
+  .term-tabs button {
+    font: 600 12.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--muted); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 8px 14px; cursor: pointer; transition: all .15s;
   }
-  .install-line .dollar { color: var(--accent); user-select: none; }
+  .term-tabs button:hover { color: var(--text); border-color: var(--muted); }
+  .term-tabs button[aria-selected="true"] { color: #06130b; background: var(--green); border-color: var(--green); }
   .terminal {
-    background: #0d1117;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    margin: 40px 0;
-    overflow: hidden;
-    box-shadow: 0 8px 30px rgba(0,0,0,.35);
+    background: #0b0f16; border: 1px solid #263042; border-radius: 12px;
+    margin: 16px 0 8px; overflow: hidden; text-align: left;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 0 1px rgba(74,222,128,.05);
   }
-  .terminal .bar {
-    background: #161b22;
-    padding: 9px 14px;
-    display: flex;
-    gap: 7px;
-    border-bottom: 1px solid var(--border);
+  .terminal .bar { background: #121826; padding: 10px 14px; display: flex; gap: 7px; align-items: center; border-bottom: 1px solid #1d2637; }
+  .terminal .bar i { width: 12px; height: 12px; border-radius: 50%; }
+  .terminal .bar i:nth-child(1) { background: #ff5f57; } .terminal .bar i:nth-child(2) { background: #febc2e; } .terminal .bar i:nth-child(3) { background: #28c840; }
+  .terminal .bar .title { margin-left: 10px; color: #5b6b83; font: 11px ui-monospace, Menlo, monospace; }
+  .term-body {
+    padding: 16px 18px 18px; min-height: 380px;
+    font: 12.8px/1.6 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: #dfe7f1; overflow-x: auto; white-space: pre;
   }
-  .terminal .bar span { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-  .terminal .bar .r { background: #ff5f57; } .terminal .bar .y { background: #febc2e; } .terminal .bar .g { background: #28c840; }
-  .terminal pre {
-    padding: 18px 20px;
-    overflow-x: auto;
-    font: 13px/1.5 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    color: #e6edf3;
+  .term-body .prompt { color: #4ade80; }
+  .cursor { display: inline-block; width: .58em; height: 1.05em; background: #4ade80; vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .t-line { position: relative; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .3s; }
+  .t-line.in { opacity: 1; transform: none; }
+  .t-line .fill {
+    position: absolute; left: 0; top: 1px; bottom: 1px; width: 0; border-radius: 3px;
+    background: linear-gradient(90deg, rgba(74,222,128,.16), rgba(74,222,128,.03));
+    transition: width .9s cubic-bezier(.2,.7,.2,1);
   }
-  .terminal .prompt { color: #3fb950; }
-  .terminal .mem { color: #d29922; }
-  .terminal .nm { color: #79c0ff; }
-  .terminal .dim { color: #8b949e; }
-  section { padding: 36px 0; border-top: 1px solid var(--border); }
-  section h2 { font-size: 1.5rem; margin-bottom: 18px; }
+  .t-line.in .fill { width: var(--w); }
+  .t-line .txt { position: relative; }
+  .t-mem { color: #fbbf24; } .t-name { color: #7cb8ff; } .t-dim { color: #64748f; } .t-mark { color: #4ade80; }
+  .jit { animation: jitflash .5s; }
+  @keyframes jitflash { 0% { color: #fbbf24; } 100% { color: inherit; } }
+  .term-hint { text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
+
+  /* ---------- sections ---------- */
+  section { padding: 56px 0 24px; }
+  section h2 { font-size: 1.6rem; margin-bottom: 6px; letter-spacing: -.5px; }
+  section h2 .h-mark { color: var(--green); font-family: ui-monospace, Menlo, monospace; font-weight: 700; margin-right: 8px; }
+  section > .wrap > p.lede { color: var(--muted); margin-bottom: 22px; max-width: 640px; }
   section p { margin-bottom: 14px; }
-  section p + h3, section pre + h3, section ul + h3 { margin-top: 26px; }
-  h3 { font-size: 1.1rem; margin-bottom: 10px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 8px; }
+
+  /* ---------- chaos -> order ---------- */
+  .sim-controls { display: flex; gap: 0; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; width: max-content; }
+  .sim-controls button {
+    font: 600 13px/1 ui-monospace, Menlo, Consolas, monospace; padding: 10px 16px; cursor: pointer;
+    background: var(--panel); color: var(--muted); border: 0; transition: all .2s;
+  }
+  .sim-controls button.on { background: var(--green); color: #06130b; }
+  #sim {
+    position: relative; height: 420px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--panel); overflow: hidden;
+  }
+  #sim::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 32px 32px; opacity: .25;
+  }
+  .chip {
+    position: absolute; left: 0; top: 0; white-space: nowrap;
+    font: 11.5px ui-monospace, Menlo, Consolas, monospace;
+    background: var(--chip); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 4px 9px;
+    transition: transform .85s cubic-bezier(.25,.8,.25,1), border-color .5s, color .5s, box-shadow .5s;
+    will-change: transform;
+  }
+  #sim.scattered .chip { animation: drift 5s ease-in-out infinite alternate; }
+  @keyframes drift { from { margin-top: 0; } to { margin-top: 9px; } }
+  #sim.grouped .chip { color: var(--text); border-left: 3px solid var(--gc, var(--green)); animation: none; }
+  #sim.grouped .chip.spotlight { box-shadow: 0 0 0 2px var(--amber); }
+  .g-head {
+    position: absolute; left: 0; top: 0; opacity: 0; transition: opacity .5s .5s;
+    font: 700 12.5px ui-monospace, Menlo, Consolas, monospace; color: var(--text); white-space: nowrap;
+  }
+  .g-head .g-mem { color: var(--amber); font-weight: 700; }
+  #sim.grouped .g-head { opacity: 1; }
+  .sim-caption { margin-top: 12px; color: var(--muted); font-size: .95rem; min-height: 1.6em; }
+  .sim-caption b { color: var(--text); }
+
+  /* ---------- cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-top: 20px; }
   .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px;
+    transition: transform .18s, border-color .18s, box-shadow .18s;
   }
-  .card h3 { margin-bottom: 8px; }
-  .card p { color: var(--muted); font-size: 0.95rem; margin: 0; }
-  code {
+  .card:hover { transform: translateY(-3px); border-color: var(--green); box-shadow: 0 10px 26px rgba(0,0,0,.22); }
+  .card .ic { font: 700 15px ui-monospace, Menlo, monospace; color: var(--green); display: block; margin-bottom: 8px; }
+  .card h3 { font-size: 1.02rem; margin-bottom: 6px; }
+  .card p { color: var(--muted); font-size: .92rem; margin: 0; }
+
+  /* ---------- install ---------- */
+  .pm-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: -1px; position: relative; z-index: 1; }
+  .pm-tabs button {
+    font: 600 13px ui-monospace, Menlo, Consolas, monospace; padding: 9px 16px; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 9px 9px 0 0;
+  }
+  .pm-tabs button[aria-selected="true"] { background: var(--panel); color: var(--text); border-color: var(--border); border-bottom-color: var(--panel); }
+  .pm-pane {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 0 10px 10px 10px;
+    padding: 18px; position: relative;
+  }
+  .pm-pane pre { font: 13.5px/1.7 ui-monospace, Menlo, Consolas, monospace; overflow-x: auto; }
+  .pm-pane .c { color: var(--muted); }
+  .copy {
+    position: absolute; top: 12px; right: 12px;
+    font: 600 12px ui-monospace, Menlo, monospace; color: var(--muted);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; transition: all .15s;
+  }
+  .copy:hover { color: var(--text); border-color: var(--muted); }
+  .copy.done { color: var(--green); border-color: var(--green); }
+
+  /* ---------- request CLI ---------- */
+  .req {
+    background: #0b0f16; border: 1px solid #263042; border-radius: 12px; padding: 22px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.9em;
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 1px 5px;
   }
-  pre.block {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 16px;
-    overflow-x: auto;
-    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    margin-bottom: 14px;
+  .req .lbl { color: #64748f; font-size: 12.5px; margin-bottom: 12px; }
+  .req-line { display: flex; align-items: center; gap: 0; font-size: 14.5px; flex-wrap: wrap; }
+  .req-line .p { color: #4ade80; margin-right: 8px; }
+  .req-line .cmd { color: #dfe7f1; }
+  .req-line .q { color: #fbbf24; }
+  #req-input {
+    flex: 1; min-width: 200px; background: transparent; border: 0; outline: none;
+    color: #fbbf24; font: inherit; caret-color: #4ade80; padding: 4px 2px;
   }
-  pre.block .c { color: var(--muted); }
-  ul.plain { list-style: none; }
-  ul.plain li { padding-left: 26px; position: relative; margin-bottom: 10px; }
-  ul.plain li::before { content: "✓"; color: var(--accent); position: absolute; left: 4px; font-weight: 700; }
-  .feature-cta {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 28px;
-    text-align: center;
-    margin-top: 10px;
+  #req-input::placeholder { color: #4a5a72; }
+  .req-actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .req-actions .btn { font-size: .9rem; padding: 8px 16px; }
+  .req-actions .alt { color: #64748f; font-size: 12.5px; }
+  .req-actions .alt a { color: #7cb8ff; }
+
+  /* ---------- RAM gauge ---------- */
+  #gauge {
+    position: fixed; right: 16px; bottom: 16px; z-index: 10;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; font: 11px ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    box-shadow: 0 6px 20px rgba(0,0,0,.3); user-select: none; pointer-events: none;
   }
-  .feature-cta p { color: var(--muted); max-width: 560px; margin: 0 auto 18px; }
-  footer { padding: 40px 0 60px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; text-align: center; }
+  #gauge .g-bar { width: 120px; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+  #gauge .g-fill { height: 100%; width: 0; background: var(--green); border-radius: 3px; transition: width .1s linear, background .3s; }
+  #gauge.warn .g-fill { background: var(--amber); }
+  #gauge.crit .g-fill { background: var(--red); }
+  #gauge.crit { animation: pressure .8s ease-in-out infinite alternate; }
+  @keyframes pressure { to { transform: scale(1.04); } }
+
+  footer { padding: 48px 0 70px; border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; text-align: center; margin-top: 40px; }
+  footer .exit { font-family: ui-monospace, Menlo, monospace; color: var(--green); }
   footer a { color: var(--muted); }
-  @media (max-width: 600px) {
-    header { padding: 48px 0 28px; }
-    header h1 { font-size: 2rem; }
-    .terminal pre { font-size: 11.5px; }
+  .pig { position: fixed; top: -50px; z-index: 99; font-size: 26px; animation: fall linear forwards; pointer-events: none; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(340deg); } }
+
+  @media (max-width: 640px) {
+    header { padding: 56px 0 24px; }
+    .term-body { font-size: 10.5px; min-height: 300px; }
+    #sim { height: 560px; }
+    #gauge { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
   }
 </style>
 </head>
 <body>
 
 <header class="wrap">
-  <h1><span class="dollar">$</span> memhogs</h1>
-  <p class="tag">See which apps are actually eating your memory.</p>
+  <h1 class="logo"><span class="dollar">$</span>memh<span class="muncher"><span class="pac" aria-label="o"></span><span class="bits" aria-hidden="true"><i class="bit"></i><i class="bit"></i><i class="bit"></i></span></span>gs</h1>
+  <p class="tag">Something is eating your memory. <b>Find out who</b> — helpers, renderers, and all.</p>
   <div class="actions">
     <a class="btn primary" href="https://github.com/cicerothoma/memhogs">View on GitHub</a>
     <a class="btn" href="https://github.com/cicerothoma/memhogs/releases/latest">Download</a>
-    <a class="btn" href="https://github.com/cicerothoma/memhogs/issues/new?template=feature_request.yml">Request a feature</a>
+    <a class="btn" href="#feature-requests">Request a feature</a>
   </div>
-  <div class="install-line"><span class="dollar">$</span> brew install cicerothoma/tap/memhogs</div>
 </header>
 
 <div class="wrap">
+  <div class="term-tabs" role="tablist" aria-label="memhogs modes" id="tabs"></div>
   <div class="terminal">
-    <div class="bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
-    <pre><span class="prompt">$</span> memhogs --top 3
+    <div class="bar"><i></i><i></i><i></i><span class="title">memhogs — zsh</span></div>
+    <div class="term-body" id="term"><noscript>$ memhogs --top 3
     MEMORY    %MEM  PROCESSES  NAME
-   <span class="mem">7.3 GiB</span>   30.4%         46  <span class="nm">Dia</span>
-                               ├─ 870.2 MiB  Dia [12251]
-                               ├─ 540.7 MiB  Browser Helper [12257]
-                               ├─ 481.2 MiB  Browser Helper (Renderer) [16103]
-                               ├─ 430.7 MiB  Browser Helper [12264]
-                               ├─ 360.0 MiB  Browser Helper (Renderer) [12604]
-                               └─ … 41 more (4.7 GiB)
-   <span class="mem">2.1 GiB</span>    8.8%         23  <span class="nm">Visual Studio Code</span>
-                               ├─ 464.0 MiB  Code Helper (Plugin) [10609]
-                               └─ … 22 more (1.6 GiB)
- <span class="mem">708.8 MiB</span>    2.9%          6  <span class="nm">Slack</span>
-                               ├─ 368.4 MiB  Slack Helper (Renderer) [17182]
-                               └─ … 5 more (340.4 MiB)
-
-<span class="dim">3 of 529 groups · 775 processes · total 20.3 GiB of 24.0 GiB RAM
-metric: memory footprint (same as Activity Monitor); 252 unreadable processes counted via RSS</span></pre>
+   7.3 GiB   30.4%         46  Dia
+   2.1 GiB    8.8%         23  Visual Studio Code
+ 708.8 MiB    2.9%          6  Slack
+(enable JavaScript for the interactive demo)</noscript></div>
   </div>
+  <p class="term-hint">↑ this terminal is live — click the flags to run each mode. <span class="mono">--watch</span> actually watches.</p>
 </div>
 
 <section>
   <div class="wrap">
-    <h2>The problem</h2>
-    <p>Modern apps are not single processes. A browser or an Electron app
-    (VS Code, Slack, Cursor) spreads its memory across dozens of helper
-    processes with names like <code>Browser Helper (Renderer)</code> or
-    <code>Code Helper (Plugin)</code>. Tools like <code>ps</code>,
-    <code>top</code>, and Activity Monitor list each one separately, so the
-    app that is using 7 GiB of your RAM never appears as a 7 GiB entry
-    anywhere.</p>
-    <p>It gets worse. Some binaries hide their identity entirely (Warp's
-    executable is named <code>stable</code>), the obvious
-    <code>ps</code> incantation sorts by CPU rather than memory, and adding
-    up RSS values double-counts memory shared between processes, inflating
-    totals by gigabytes.</p>
-    <p>memhogs fixes all of that in one command.</p>
+    <h2><span class="h-mark">01</span>Your process list is lying to you</h2>
+    <p class="lede">Watch what happens when 17 anonymous processes meet a process tree.</p>
+    <div class="sim-controls" role="tablist" aria-label="simulation view">
+      <button id="btn-ps" class="on">what ps shows you</button>
+      <button id="btn-mh">what memhogs shows you</button>
+    </div>
+    <div id="sim" class="scattered" aria-hidden="true"></div>
+    <p class="sim-caption" id="sim-cap">17 processes. Which app owns what? Good luck — one of them is a browser named <b>stable</b>.</p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>What it does</h2>
+    <h2><span class="h-mark">02</span>What it does</h2>
     <div class="cards">
-      <div class="card">
-        <h3>Groups by app</h3>
-        <p>Walks the process tree, so every helper, renderer, and language
-        server rolls up into the application that spawned it. One app, one
-        row, one total.</p>
-      </div>
-      <div class="card">
-        <h3>Real names</h3>
-        <p>Resolves processes to the .app bundle on macOS and the systemd
-        unit on Linux. Warp shows up as Warp, not <code>stable</code>.</p>
-      </div>
-      <div class="card">
-        <h3>Honest numbers</h3>
-        <p>Uses memory footprint on macOS (the Activity Monitor metric) and
-        PSS on Linux, so shared memory is never counted twice. Plain RSS is
-        one flag away.</p>
-      </div>
-      <div class="card">
-        <h3>Respects your terminal</h3>
-        <p>Jobs you launch from a shell stay separate. A 4 GiB training run
-        started in a terminal tab shows up as python3, not as your terminal
-        app.</p>
-      </div>
-      <div class="card">
-        <h3>Scriptable</h3>
-        <p>JSON output with raw byte counts for dashboards and alerts.
-        Filter by name, cap the list, or watch it live.</p>
-      </div>
-      <div class="card">
-        <h3>Small and fast</h3>
-        <p>A single static binary for macOS and Linux, amd64 and arm64.
-        No runtime, no configuration, no dependencies.</p>
-      </div>
+      <div class="card"><span class="ic">├─</span><h3>Groups by owner</h3><p>Walks the process tree so every helper, renderer, and language server rolls up into the app that spawned it. One app, one row, one total.</p></div>
+      <div class="card"><span class="ic">.app</span><h3>Real names</h3><p>Resolves the .app bundle on macOS and the systemd unit on Linux. Warp shows up as Warp, not as a binary called stable.</p></div>
+      <div class="card"><span class="ic">≈</span><h3>Honest numbers</h3><p>Memory footprint on macOS (the Activity Monitor metric), PSS on Linux. Shared memory is never counted twice. Plain RSS is one flag away.</p></div>
+      <div class="card"><span class="ic">$_</span><h3>Your jobs stay yours</h3><p>The tree walk stops at interactive shells, so the 4 GiB training run you launched from a terminal tab shows as python3, not as your terminal.</p></div>
+      <div class="card"><span class="ic">{ }</span><h3>Scriptable</h3><p>JSON output with raw byte counts for dashboards and alerts. Filter by name, cap the list, or watch it live.</p></div>
+      <div class="card"><span class="ic">2.2M</span><h3>Small and fast</h3><p>One static binary for macOS and Linux, amd64 and arm64. No runtime, no config, no dependencies.</p></div>
     </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>When you'd reach for it</h2>
-    <ul class="plain">
-      <li>Your laptop fan is spinning and you want the culprit ranked, named,
-      and totalled in one command.</li>
-      <li>You are on a remote Linux server where Activity Monitor does not
-      exist and <code>top</code> shows you five hundred anonymous rows.</li>
-      <li>You want to know what quitting your browser would actually give
-      back, including all its renderers.</li>
-      <li>You are watching a suspected memory leak grow with
-      <code>memhogs --watch myapp</code>.</li>
-      <li>You feed <code>memhogs --json</code> into a script that alerts when
-      any one app crosses a threshold.</li>
-    </ul>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>Install</h2>
-    <h3>Homebrew (macOS and Linux)</h3>
-    <pre class="block">brew install cicerothoma/tap/memhogs</pre>
-    <h3>Debian / Ubuntu</h3>
-    <pre class="block"><span class="c"># download the .deb from the latest release, then</span>
+    <h2><span class="h-mark">03</span>Install</h2>
+    <p class="lede">Prebuilt binaries. No Go required.</p>
+    <div class="pm-tabs" role="tablist" id="pm-tabs">
+      <button aria-selected="true" data-pane="brew">brew</button>
+      <button aria-selected="false" data-pane="deb">apt / dpkg</button>
+      <button aria-selected="false" data-pane="rpm">rpm / apk</button>
+      <button aria-selected="false" data-pane="go">go</button>
+    </div>
+    <div class="pm-pane">
+      <button class="copy" id="copy-btn">copy</button>
+      <pre id="pane-brew">brew install cicerothoma/tap/memhogs</pre>
+      <pre id="pane-deb" hidden><span class="c"># download the .deb from the latest release, then</span>
 sudo dpkg -i memhogs_*.deb</pre>
-    <h3>Fedora / RHEL / Alpine</h3>
-    <pre class="block">sudo rpm -i memhogs-*.rpm          <span class="c"># Fedora, RHEL</span>
-sudo apk add --allow-untrusted memhogs_*.apk   <span class="c"># Alpine</span></pre>
-    <h3>Go</h3>
-    <pre class="block">go install github.com/cicerothoma/memhogs@latest</pre>
-    <p>Prebuilt tarballs for every platform are on the
-    <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>.</p>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>Commands at a glance</h2>
-    <pre class="block">memhogs                 <span class="c"># groups sorted by memory, top 5 members each</span>
-memhogs --tree          <span class="c"># expand every member process</span>
-memhogs --compact       <span class="c"># one row per group</span>
-memhogs --flat          <span class="c"># individual processes, no grouping</span>
-memhogs --top 10        <span class="c"># only the 10 largest</span>
-memhogs --json          <span class="c"># machine-readable output</span>
-memhogs --watch         <span class="c"># live view, refreshes every 2s</span>
-memhogs --rss           <span class="c"># ps/top-comparable numbers</span>
-memhogs slack           <span class="c"># only groups matching "slack"</span></pre>
-    <p>The <a href="https://github.com/cicerothoma/memhogs#usage">README</a>
-    shows example output for each one.</p>
+      <pre id="pane-rpm" hidden>sudo rpm -i memhogs-*.rpm                        <span class="c"># Fedora / RHEL</span>
+sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span></pre>
+      <pre id="pane-go" hidden>go install github.com/cicerothoma/memhogs@latest</pre>
+    </div>
+    <p style="margin-top:14px; color:var(--muted); font-size:.92rem">Tarballs for every platform are on the <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>.</p>
   </div>
 </section>
 
 <section id="feature-requests">
   <div class="wrap">
-    <h2>Feature requests</h2>
-    <div class="feature-cta">
-      <p>Missing a flag, a metric, or a platform? Requests are tracked as
-      GitHub issues so you can see what has been asked for, vote with a
-      thumbs-up, and follow progress. Bug reports are welcome through the
-      same door.</p>
-      <a class="btn primary" href="https://github.com/cicerothoma/memhogs/issues/new?template=feature_request.yml">Request a feature</a>
-      <a class="btn" href="https://github.com/cicerothoma/memhogs/issues">Browse open requests</a>
+    <h2><span class="h-mark">04</span>Missing a flag?</h2>
+    <p class="lede">Feature requests are tracked as GitHub issues, so you can browse what's been asked for and vote with a thumbs-up. This prompt is a shortcut:</p>
+    <div class="req">
+      <div class="lbl"># type your idea and hit enter — opens a prefilled GitHub issue</div>
+      <div class="req-line">
+        <span class="p">$</span><span class="cmd">memhogs --request&nbsp;</span><span class="q">"</span><input id="req-input" type="text" maxlength="120" placeholder="a --containers flag that groups by docker container" aria-label="describe your feature request"><span class="q">"</span>
+      </div>
+      <div class="req-actions">
+        <button class="btn primary" id="req-go">submit ↵</button>
+        <span class="alt">or <a href="https://github.com/cicerothoma/memhogs/issues/new?template=bug_report.yml">report a bug</a> · <a href="https://github.com/cicerothoma/memhogs/issues">browse open requests</a></span>
+      </div>
     </div>
   </div>
 </section>
 
+<div id="gauge" aria-hidden="true">
+  <span id="g-label">MEM 0.0 / 24.0 GiB</span>
+  <div class="g-bar"><div class="g-fill" id="g-fill"></div></div>
+</div>
+
 <footer>
   <div class="wrap">
-    <p>MIT licensed. Built by <a href="https://github.com/cicerothoma">Collins Thomas</a>.
-    Source on <a href="https://github.com/cicerothoma/memhogs">GitHub</a>.</p>
+    <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://github.com/cicerothoma">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a></p>
+    <p style="margin-top:6px; font-size:.8rem; opacity:.65">psst — try typing <span class="mono">hog</span></p>
   </div>
 </footer>
 
+<script>
+(function () {
+  "use strict";
+  var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ================= data ================= */
+  var RAM = 24576; // MiB
+  var GROUPS = [
+    { name: "Dia", mem: 7475, procs: 46,
+      members: [["Dia", 870], ["Browser Helper", 541], ["Browser Helper (Renderer)", 481], ["Browser Helper", 431], ["Browser Helper (Renderer)", 360]],
+      rest: [41, 4792] },
+    { name: "Visual Studio Code", mem: 2150, procs: 23,
+      members: [["Code Helper (Plugin)", 464], ["Code Helper (Plugin)", 310], ["Code Helper (Renderer)", 272], ["Code Helper (Plugin)", 258], ["Code Helper (Renderer)", 239]],
+      rest: [18, 607] },
+    { name: "Slack", mem: 709, procs: 6,
+      members: [["Slack Helper (Renderer)", 368], ["Slack Helper", 205], ["Slack", 108], ["Slack Helper", 11], ["Slack Helper", 10]],
+      rest: [1, 7] },
+    { name: "Warp", mem: 413, procs: 6,
+      members: [["stable", 386], ["stable", 9], ["-zsh", 5], ["-zsh", 4], ["-zsh", 4]],
+      rest: [1, 5] }
+  ];
+  var TOTALS = { groups: 529, procs: 775, used: "20.3", ram: "24.0" };
+  var FOOT_FAIR = "metric: memory footprint (same as Activity Monitor); 252 unreadable processes counted via RSS";
+  var FOOT_RSS  = "metric: RSS (shared memory counted once per process, so totals overstate)";
+
+  function fmt(mib) {
+    return mib >= 1024 ? (mib / 1024).toFixed(1) + " GiB" : mib.toFixed(1) + " MiB";
+  }
+  function pct(mib) { return (mib / RAM * 100).toFixed(1) + "%"; }
+  function pad(s, n) { s = String(s); return " ".repeat(Math.max(0, n - s.length)) + s; }
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+  /* ================= terminal ================= */
+  var term = document.getElementById("term");
+  var tabsEl = document.getElementById("tabs");
+  var watchTimer = null, typeTimer = null;
+
+  function groupRow(g, mem, maxMem) {
+    return { bar: mem / maxMem,
+      html: '<span class="t-mem">' + pad(fmt(mem), 10) + '</span>  ' + pad(pct(mem), 6) + '  ' + pad(g.procs, 9) + '  <span class="t-name">' + esc(g.name) + "</span>" };
+  }
+  function memberRows(g, cap) {
+    var out = [], ms = g.members.slice(0, cap);
+    ms.forEach(function (m, i) {
+      var last = i === ms.length - 1 && !g.rest;
+      out.push({ html: '<span class="t-dim">' + " ".repeat(31) + (last ? "└─" : "├─") + "</span> " + pad(fmt(m[1]), 9) + "  " + esc(m[0]) });
+    });
+    if (g.rest) out.push({ html: '<span class="t-dim">' + " ".repeat(31) + "└─ … " + g.rest[0] + " more (" + fmt(g.rest[1]) + ")</span>" });
+    return out;
+  }
+  function header() { return { html: '<span class="t-dim">' + pad("MEMORY", 10) + "  " + pad("%MEM", 6) + "  " + pad("PROCESSES", 9) + "  NAME</span>" }; }
+  function footer(shown, metric) {
+    return [{ html: "" },
+      { html: '<span class="t-dim">' + shown + " of " + TOTALS.groups + " groups · " + TOTALS.procs + " processes · total " + TOTALS.used + " GiB of " + TOTALS.ram + " GiB RAM</span>" },
+      { html: '<span class="t-dim">' + metric + "</span>" }];
+  }
+
+  var MODES = {
+    "default": { cmd: "memhogs --top 3", lines: function () {
+      var out = [header()], max = GROUPS[0].mem;
+      GROUPS.slice(0, 3).forEach(function (g) { out.push(groupRow(g, g.mem, max)); out = out.concat(memberRows(g, 5)); });
+      return out.concat(footer(3, FOOT_FAIR));
+    }},
+    "--tree": { cmd: "memhogs --tree slack", lines: function () {
+      var g = GROUPS[2], out = [header(), groupRow(g, g.mem, g.mem)];
+      var full = { name: g.name, procs: g.procs, members: g.members.concat([["Slack Helper", 7]]), rest: null };
+      out = out.concat(memberRows(full, 9));
+      return out.concat([{ html: "" }, { html: '<span class="t-dim">1 of 1 groups · 6 processes · total 708.8 MiB of 24.0 GiB RAM</span>' }, { html: '<span class="t-dim">' + FOOT_FAIR + "</span>" }]);
+    }},
+    "--compact": { cmd: "memhogs --compact --top 4", lines: function () {
+      var out = [header()], max = GROUPS[0].mem;
+      GROUPS.forEach(function (g) { out.push(groupRow(g, g.mem, max)); });
+      return out.concat(footer(4, FOOT_FAIR));
+    }},
+    "--flat": { cmd: "memhogs --flat --top 6", lines: function () {
+      var procs = [["Dia", 870, 12251], ["Browser Helper", 541, 12257], ["Browser Helper (Renderer)", 481, 16103], ["Code Helper (Plugin)", 464, 10609], ["VTDecoderXPCService", 458, 80624], ["stable", 386, 55637]];
+      var out = [{ html: '<span class="t-dim">' + pad("MEMORY", 10) + "  " + pad("%MEM", 6) + "  " + pad("PID", 7) + "  NAME</span>" }];
+      procs.forEach(function (p) {
+        out.push({ bar: p[1] / 870, html: '<span class="t-mem">' + pad(fmt(p[1]), 10) + "</span>  " + pad(pct(p[1]), 6) + "  " + pad(p[2], 7) + '  <span class="t-name">' + esc(p[0]) + "</span>" });
+      });
+      return out.concat([{ html: "" }, { html: '<span class="t-dim">6 of 775 processes · total 20.3 GiB of 24.0 GiB RAM</span>' }, { html: '<span class="t-dim">' + FOOT_FAIR + "</span>" }]);
+    }},
+    "--watch": { cmd: "memhogs --watch --compact --top 4", watch: true, lines: function () {
+      var now = new Date(), ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function (n) { return String(n).padStart(2, "0"); }).join(":");
+      var out = [{ html: '<span class="t-dim">memhogs · ' + ts + ' · every 2s (ctrl-c to quit)</span>' }, { html: "" }, header()];
+      var max = GROUPS[0].mem;
+      GROUPS.forEach(function (g, i) {
+        var m = g.mem * (1 + (Math.sin(Date.now() / 900 + i * 2.1) * 0.035));
+        out.push(groupRow(g, m, max));
+      });
+      return out.concat(footer(4, FOOT_FAIR));
+    }},
+    "--rss": { cmd: "memhogs --rss --compact --top 4", lines: function () {
+      var infl = [0.86, 0.78, 0.9, 1.35], out = [header()], max = GROUPS[0].mem;
+      GROUPS.forEach(function (g, i) { out.push(groupRow(g, g.mem / infl[i], max)); });
+      out = out.concat([{ html: "" }, { html: '<span class="t-dim">4 of 530 groups · 776 processes · total 21.7 GiB of 24.0 GiB RAM</span>' }, { html: '<span class="t-dim">' + FOOT_RSS + "</span>" }]);
+      return out;
+    }}
+  };
+
+  function stopTimers() {
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+    if (typeTimer) { clearTimeout(typeTimer); typeTimer = null; }
+  }
+
+  function renderLines(lines, container) {
+    var frag = document.createDocumentFragment();
+    lines.forEach(function (l, i) {
+      var div = document.createElement("div");
+      div.className = "t-line";
+      var inner = "";
+      if (l.bar) { div.style.setProperty("--w", Math.round(l.bar * 92) + "%"); inner += '<span class="fill"></span>'; }
+      inner += '<span class="txt">' + (l.html || "&nbsp;") + "</span>";
+      div.innerHTML = inner;
+      frag.appendChild(div);
+      var delay = reduced ? 0 : 40 + i * 45;
+      setTimeout(function () { div.classList.add("in"); }, delay);
+    });
+    container.appendChild(frag);
+  }
+
+  function runMode(key) {
+    stopTimers();
+    var mode = MODES[key];
+    term.innerHTML = "";
+    var cmdLine = document.createElement("div");
+    cmdLine.innerHTML = '<span class="prompt">$</span> <span class="typed"></span><span class="cursor"></span>';
+    term.appendChild(cmdLine);
+    var typed = cmdLine.querySelector(".typed");
+    var cur = cmdLine.querySelector(".cursor");
+    var cmd = mode.cmd, i = 0;
+
+    function finish() {
+      cur.remove();
+      var out = document.createElement("div");
+      term.appendChild(out);
+      renderLines(mode.lines(), out);
+      if (mode.watch && !reduced) {
+        watchTimer = setInterval(function () {
+          out.innerHTML = "";
+          var lines = mode.lines();
+          lines.forEach(function (l) {
+            var div = document.createElement("div");
+            div.className = "t-line in";
+            var inner = "";
+            if (l.bar) { div.style.setProperty("--w", Math.round(l.bar * 92) + "%"); inner += '<span class="fill"></span>'; }
+            inner += '<span class="txt jit">' + (l.html || "&nbsp;") + "</span>";
+            div.innerHTML = inner;
+            out.appendChild(div);
+          });
+        }, 2000);
+      }
+    }
+    if (reduced) { typed.textContent = cmd; finish(); return; }
+    (function type() {
+      if (i <= cmd.length) { typed.textContent = cmd.slice(0, i); i++; typeTimer = setTimeout(type, 16 + Math.random() * 26); }
+      else { typeTimer = setTimeout(finish, 160); }
+    })();
+  }
+
+  Object.keys(MODES).forEach(function (key, idx) {
+    var b = document.createElement("button");
+    b.textContent = key === "default" ? "memhogs" : key;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", idx === 0 ? "true" : "false");
+    b.addEventListener("click", function () {
+      tabsEl.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-selected", "false"); });
+      b.setAttribute("aria-selected", "true");
+      runMode(key);
+    });
+    tabsEl.appendChild(b);
+  });
+  runMode("default");
+  document.addEventListener("visibilitychange", function () { if (document.hidden) stopTimers(); });
+
+  /* ================= chaos -> order ================= */
+  var sim = document.getElementById("sim");
+  var cap = document.getElementById("sim-cap");
+  var btnPs = document.getElementById("btn-ps"), btnMh = document.getElementById("btn-mh");
+  var SIMG = [
+    { name: "Dia", mem: "7.3 GiB", color: "#7cb8ff", chips: ["Dia", "Browser Helper", "Browser Helper (Renderer)", "Browser Helper (Renderer)", "Browser Helper (GPU)"] },
+    { name: "python3", mem: "4.0 GiB", color: "#4ade80", note: "yours — launched from a shell", chips: ["python3", "python3 (worker)"] },
+    { name: "VS Code", mem: "2.1 GiB", color: "#c084fc", chips: ["Code", "Code Helper (Plugin)", "Code Helper (Renderer)", "Code Helper (Plugin)"] },
+    { name: "Slack", mem: "709 MiB", color: "#fbbf24", chips: ["Slack", "Slack Helper (Renderer)", "Slack Helper"] },
+    { name: "Warp", mem: "413 MiB", color: "#f87171", chips: ["stable", "stable", "-zsh"] }
+  ];
+  var chipEls = [], headEls = [];
+  var seed = 42;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  SIMG.forEach(function (g, gi) {
+    var h = document.createElement("div");
+    h.className = "g-head";
+    h.innerHTML = esc(g.name) + ' <span class="g-mem">' + g.mem + "</span>" + (g.note ? '<br><span style="font-weight:400;color:var(--muted);font-size:10.5px">' + g.note + "</span>" : "");
+    sim.appendChild(h);
+    headEls.push(h);
+    g.chips.forEach(function (label) {
+      var c = document.createElement("span");
+      c.className = "chip";
+      c.textContent = label;
+      c.style.setProperty("--gc", g.color);
+      if (label === "stable") { c.classList.add("is-stable"); }
+      c.dataset.g = gi;
+      if (!reduced) c.style.animationDelay = (rnd() * -5).toFixed(2) + "s";
+      sim.appendChild(c);
+      chipEls.push(c);
+    });
+  });
+
+  function layoutScattered() {
+    var W = sim.clientWidth, H = sim.clientHeight;
+    seed = 1337;
+    chipEls.forEach(function (c) {
+      var x = 16 + rnd() * (W - c.offsetWidth - 32);
+      var y = 16 + rnd() * (H - 60);
+      c.style.transform = "translate(" + x + "px," + y + "px)";
+      c.classList.remove("spotlight");
+    });
+  }
+  function layoutGrouped() {
+    var W = sim.clientWidth, H = sim.clientHeight;
+    var narrow = W < 640;
+    var cols = narrow ? 2 : 5;
+    var colW = (W - 32) / cols;
+    SIMG.forEach(function (g, gi) {
+      var col = narrow ? gi % 2 : gi;
+      var rowBase = narrow ? (gi < 2 ? 0 : gi < 4 ? Math.ceil(H / 2.6) : Math.ceil(H / 1.45)) : 0;
+      var x = 16 + col * colW + 4;
+      var y = 22 + rowBase;
+      headEls[gi].style.transform = "translate(" + x + "px," + y + "px)";
+      var cy = y + (SIMG[gi].note ? 44 : 30);
+      chipEls.forEach(function (c) {
+        if (+c.dataset.g !== gi) return;
+        c.style.transform = "translate(" + x + "px," + cy + "px)";
+        cy += c.offsetHeight + 7;
+        if (c.classList.contains("is-stable")) c.classList.add("spotlight");
+      });
+    });
+  }
+  function setSim(grouped, user) {
+    sim.className = grouped ? "grouped" : "scattered";
+    btnPs.classList.toggle("on", !grouped);
+    btnMh.classList.toggle("on", grouped);
+    if (grouped) {
+      layoutGrouped();
+      cap.innerHTML = "5 owners, sorted and totalled. <b>stable</b> turned out to be Warp, and your python job didn't get blamed on the terminal.";
+    } else {
+      layoutScattered();
+      cap.innerHTML = "17 processes. Which app owns what? Good luck — one of them is a browser named <b>stable</b>.";
+    }
+    if (user) autoPlayed = true;
+  }
+  var autoPlayed = false;
+  btnPs.addEventListener("click", function () { setSim(false, true); });
+  btnMh.addEventListener("click", function () { setSim(true, true); });
+  layoutScattered();
+  addEventListener("resize", function () { setSim(sim.className === "grouped", autoPlayed); });
+  if ("IntersectionObserver" in window && !reduced) {
+    new IntersectionObserver(function (entries, obs) {
+      if (entries[0].isIntersecting && !autoPlayed) {
+        setTimeout(function () { if (!autoPlayed) setSim(true, false); }, 900);
+        obs.disconnect();
+      }
+    }, { threshold: 0.55 }).observe(sim);
+  }
+
+  /* ================= install tabs ================= */
+  var pmTabs = document.getElementById("pm-tabs");
+  var copyBtn = document.getElementById("copy-btn");
+  var current = "brew";
+  pmTabs.addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    pmTabs.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-selected", "false"); });
+    b.setAttribute("aria-selected", "true");
+    current = b.dataset.pane;
+    ["brew", "deb", "rpm", "go"].forEach(function (p) {
+      document.getElementById("pane-" + p).hidden = p !== current;
+    });
+    copyBtn.textContent = "copy"; copyBtn.classList.remove("done");
+  });
+  copyBtn.addEventListener("click", function () {
+    var text = document.getElementById("pane-" + current).textContent.replace(/^#.*\n/gm, "").trim();
+    navigator.clipboard.writeText(text).then(function () {
+      copyBtn.textContent = "copied ✓"; copyBtn.classList.add("done");
+      setTimeout(function () { copyBtn.textContent = "copy"; copyBtn.classList.remove("done"); }, 1600);
+    });
+  });
+
+  /* ================= request CLI ================= */
+  var reqInput = document.getElementById("req-input");
+  function submitRequest() {
+    var idea = reqInput.value.trim();
+    var url = "https://github.com/cicerothoma/memhogs/issues/new?template=feature_request.yml";
+    if (idea) url += "&title=" + encodeURIComponent("[feature] " + idea);
+    window.open(url, "_blank", "noopener");
+  }
+  document.getElementById("req-go").addEventListener("click", submitRequest);
+  reqInput.addEventListener("keydown", function (e) { if (e.key === "Enter") submitRequest(); });
+
+  /* ================= RAM gauge (scroll) ================= */
+  var gauge = document.getElementById("gauge"), gFill = document.getElementById("g-fill"), gLabel = document.getElementById("g-label");
+  var ticking = false;
+  function paintGauge() {
+    ticking = false;
+    var max = document.documentElement.scrollHeight - innerHeight;
+    var p = max > 0 ? Math.min(1, scrollY / max) : 0;
+    gFill.style.width = (p * 100).toFixed(1) + "%";
+    var gib = (p * 24).toFixed(1);
+    gLabel.textContent = p >= 0.995 ? "MEM 24.0 / 24.0 GiB · swapping…" : "MEM " + gib + " / 24.0 GiB";
+    gauge.classList.toggle("warn", p > 0.6 && p <= 0.85);
+    gauge.classList.toggle("crit", p > 0.85);
+  }
+  addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(paintGauge); } }, { passive: true });
+  paintGauge();
+
+  /* ================= easter egg ================= */
+  var buf = "";
+  addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    buf = (buf + e.key).slice(-3);
+    if (buf === "hog" && !reduced) {
+      for (var i = 0; i < 18; i++) {
+        var p = document.createElement("span");
+        p.className = "pig";
+        p.textContent = "🐷";
+        p.style.left = Math.random() * 100 + "vw";
+        p.style.animationDuration = (1.6 + Math.random() * 2.2) + "s";
+        p.style.animationDelay = (Math.random() * 0.9) + "s";
+        document.body.appendChild(p);
+        setTimeout(function (el) { return function () { el.remove(); }; }(p), 5200);
+      }
+      buf = "";
+    }
+  });
+})();
+</script>
 </body>
 </html>
