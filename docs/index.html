@@ -337,6 +337,15 @@
     *, *::before, *::after { animation: none !important; transition: none !important; }
     html { scroll-behavior: auto; }
   }
+/* Android app section */
+.droid{display:grid;grid-template-columns:280px 1fr;gap:34px;align-items:start;margin-top:26px}
+.droid img{width:100%;height:auto;border-radius:18px;border:1px solid rgba(255,255,255,.09);display:block}
+.droid-steps{list-style:none;counter-reset:step;margin:0;padding:0}
+.droid-steps li{counter-increment:step;position:relative;padding:0 0 16px 44px;color:var(--muted);font-size:.97rem;line-height:1.55}
+.droid-steps li b{color:var(--fg,#d7dee8)}
+.droid-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;color:#0b0e11;background:var(--green,#7ec699)}
+.droid-note{margin-top:8px;color:var(--muted);font-size:.92rem}
+@media (max-width:720px){.droid{grid-template-columns:1fr}.droid img{max-width:280px;margin:0 auto}}
 </style>
 </head>
 <body>
@@ -386,7 +395,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
       <pre id="pane-go" hidden>go install github.com/cicerothoma/memhogs@latest</pre>
     </div>
     <p style="margin-top:14px; color:var(--muted); font-size:.92rem">brew also works on Linux. Tarballs for every platform are on the <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>, and the <a href="https://github.com/cicerothoma/memhogs#install">README</a> walks through every option.</p>
-    <p style="margin-top:8px; color:var(--muted); font-size:.92rem">On a phone? The <a href="https://github.com/cicerothoma/memhogs-android">Android companion app</a> brings the same per-app breakdown to your pocket via Shizuku. Grab the APK from its <a href="https://github.com/cicerothoma/memhogs-android/releases/latest">releases page</a>; an F-Droid listing is in review.</p>
+    <p style="margin-top:8px; color:var(--muted); font-size:.92rem">On a phone? There is an <a href="#android">Android app</a> too, with its own install walkthrough below.</p>
   </div>
 </section>
 
@@ -435,9 +444,32 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
   </div>
 </section>
 
+<section id="android">
+  <div class="wrap">
+    <h2><span class="h-mark">05</span>memhogs for Android</h2>
+    <p class="lede">The same idea in your pocket: every app ranked by honest memory, helpers grouped under the app that owns them, and a safe reclaim button that reports exactly how much came back.</p>
+    <div class="droid">
+      <img src="android-app.png" width="1080" height="2400" alt="memhogs on a phone, apps ranked by memory with proportional bars" loading="lazy">
+      <div>
+        <ol class="droid-steps">
+          <li><b>Download the APK</b> from the releases page and open it. If Android asks, allow installs from your browser. Requires Android 8 or newer.</li>
+          <li><b>Install Shizuku</b> from the Play Store, or from its <a href="https://github.com/RikkaApps/Shizuku/releases/latest">GitHub releases</a> if the Play Store claims it is incompatible with a brand-new Android version. Android hides other apps' memory from normal apps; Shizuku unlocks it the way a USB debugger would, no root needed.</li>
+          <li><b>Start the Shizuku service</b> inside the Shizuku app via wireless debugging. One tap, once per boot.</li>
+          <li><b>Open memhogs and grant access.</b> The per-app breakdown appears; tap any app to see its processes or reclaim its background memory.</li>
+        </ol>
+        <div class="actions" style="margin-top:6px">
+          <a class="btn primary" href="https://github.com/cicerothoma/memhogs-android/releases/latest">Download the APK</a>
+          <a class="btn" href="https://github.com/cicerothoma/memhogs-android#readme">Android docs</a>
+        </div>
+        <p class="droid-note">Reclaim kills background processes only, the same thing Android does under memory pressure, so nothing you have open is touched. Without Shizuku the app still shows the device-wide gauge.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="memory-guide">
   <div class="wrap">
-    <h2><span class="h-mark">05</span>A short field guide to process memory</h2>
+    <h2><span class="h-mark">06</span>A short field guide to process memory</h2>
     <p class="lede">"How much memory is that app using?" has several honest answers. Here is what the abbreviations mean and why the tools disagree.</p>
 
     <p>A process reserves a large range of addresses (its <b>virtual
@@ -487,7 +519,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 
 <section id="feature-requests">
   <div class="wrap">
-    <h2><span class="h-mark">06</span>Missing a flag?</h2>
+    <h2><span class="h-mark">07</span>Missing a flag?</h2>
     <p class="lede">Feature requests are tracked as GitHub issues, so you can browse what's been asked for and vote with a thumbs-up. This prompt is a shortcut:</p>
     <div class="req">
       <div class="lbl"># type your idea and hit enter to open a prefilled GitHub issue</div>
