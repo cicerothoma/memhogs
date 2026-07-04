@@ -345,9 +345,10 @@
   <h1 class="logo"><span class="dollar">$</span>memh<span class="muncher"><span class="pac" aria-label="o"></span><span class="bits" aria-hidden="true"><i class="bit"></i><i class="bit"></i><i class="bit"></i></span></span>gs</h1>
   <p class="tag">Something is eating your memory. <b>Find out who</b>: helpers, renderers, and all.</p>
   <div class="actions">
-    <a class="btn primary" href="https://github.com/cicerothoma/memhogs">View on GitHub</a>
-    <a class="btn" href="https://github.com/cicerothoma/memhogs/releases/latest">Download</a>
-    <a class="btn" href="#feature-requests">Request a feature</a>
+    <a class="btn primary" href="#install">Install</a>
+    <a class="btn" href="#usage">How to use</a>
+    <a class="btn" href="https://github.com/cicerothoma/memhogs#readme">Docs</a>
+    <a class="btn" href="https://github.com/cicerothoma/memhogs">GitHub</a>
   </div>
 </header>
 
@@ -365,9 +366,33 @@
   <p class="term-hint">↑ this terminal is live. Click the flags to run each mode. <span class="mono">--watch</span> actually watches.</p>
 </div>
 
+<section id="install">
+  <div class="wrap">
+    <h2><span class="h-mark">01</span>Install</h2>
+    <p class="lede">Prebuilt binaries, no Go required. Pick your platform; on a Mac, brew is the one you want.</p>
+    <div class="pm-tabs" role="tablist" id="pm-tabs">
+      <button aria-selected="true" data-pane="brew">macOS · brew</button>
+      <button aria-selected="false" data-pane="deb">Debian / Ubuntu</button>
+      <button aria-selected="false" data-pane="rpm">Fedora / Alpine</button>
+      <button aria-selected="false" data-pane="go">Go</button>
+    </div>
+    <div class="pm-pane">
+      <button class="copy" id="copy-btn">copy</button>
+      <pre id="pane-brew">brew install cicerothoma/tap/memhogs</pre>
+      <pre id="pane-deb" hidden><span class="c"># download the .deb from the latest release, then</span>
+sudo dpkg -i memhogs_*.deb</pre>
+      <pre id="pane-rpm" hidden>sudo rpm -i memhogs-*.rpm                        <span class="c"># Fedora / RHEL</span>
+sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span></pre>
+      <pre id="pane-go" hidden>go install github.com/cicerothoma/memhogs@latest</pre>
+    </div>
+    <p style="margin-top:14px; color:var(--muted); font-size:.92rem">brew also works on Linux. Tarballs for every platform are on the <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>, and the <a href="https://github.com/cicerothoma/memhogs#install">README</a> walks through every option.</p>
+    <p style="margin-top:8px; color:var(--muted); font-size:.92rem">On a phone? The <a href="https://github.com/cicerothoma/memhogs-android">Android companion app</a> brings the same per-app breakdown to your pocket via Shizuku. Grab the APK from its <a href="https://github.com/cicerothoma/memhogs-android/releases/latest">releases page</a>; an F-Droid listing is in review.</p>
+  </div>
+</section>
+
 <section>
   <div class="wrap">
-    <h2><span class="h-mark">01</span>Your process list is lying to you</h2>
+    <h2><span class="h-mark">02</span>Your process list is lying to you</h2>
     <p class="lede">Watch what happens when 17 anonymous processes meet a process tree.</p>
     <div class="sim-controls" role="tablist" aria-label="simulation view">
       <button id="btn-ps" class="on">what ps shows you</button>
@@ -380,7 +405,7 @@
 
 <section>
   <div class="wrap">
-    <h2><span class="h-mark">02</span>What it does</h2>
+    <h2><span class="h-mark">03</span>What it does</h2>
     <div class="cards">
       <div class="card"><span class="ic">├─</span><h3>Groups by owner</h3><p>Walks the process tree so every helper, renderer, and language server rolls up into the app that spawned it. One app, one row, one total.</p></div>
       <div class="card"><span class="ic">.app</span><h3>Real names</h3><p>Resolves the .app bundle on macOS and the systemd unit on Linux. Warp shows up as Warp, not as a binary called stable.</p></div>
@@ -392,33 +417,27 @@
   </div>
 </section>
 
-<section>
+<section id="usage">
   <div class="wrap">
-    <h2><span class="h-mark">03</span>Install</h2>
-    <p class="lede">Prebuilt binaries. No Go required.</p>
-    <div class="pm-tabs" role="tablist" id="pm-tabs">
-      <button aria-selected="true" data-pane="brew">brew</button>
-      <button aria-selected="false" data-pane="deb">apt / dpkg</button>
-      <button aria-selected="false" data-pane="rpm">rpm / apk</button>
-      <button aria-selected="false" data-pane="go">go</button>
+    <h2><span class="h-mark">04</span>How to use it</h2>
+    <p class="lede">Run <code>memhogs</code> and read the top of the list. Everything else is a flag, and every mode below is runnable in the live terminal at the top of this page.</p>
+    <div class="gloss">
+      <div class="g-item"><h3><code>memhogs</code></h3><p>Every app and service, largest first. Groups expand to their five biggest processes; the footer tells you the metric and the machine total.</p></div>
+      <div class="g-item"><h3><code>memhogs --compact</code></h3><p>One row per app, no member processes. The quickest answer to "who is eating my RAM".</p></div>
+      <div class="g-item"><h3><code>memhogs --tree</code></h3><p>Every member process of every group, when you need to know which renderer is the 2 GiB one.</p></div>
+      <div class="g-item"><h3><code>memhogs --flat</code></h3><p>Raw processes ranked like <code>top</code>, but with real names and the fair metric.</p></div>
+      <div class="g-item"><h3><code>memhogs slack</code></h3><p>Any extra word filters by name, case-insensitive. Works with every mode.</p></div>
+      <div class="g-item"><h3><code>memhogs --watch --top 10</code></h3><p>Live view, refreshed every two seconds. <code>--interval 5s</code> changes the pace.</p></div>
+      <div class="g-item"><h3><code>memhogs --json</code></h3><p>The full structure with raw byte counts, for scripts, dashboards, and alerts.</p></div>
+      <div class="g-item"><h3><code>memhogs --rss</code></h3><p>Switches to the number <code>ps</code> and <code>top</code> report, for comparing against those tools.</p></div>
     </div>
-    <div class="pm-pane">
-      <button class="copy" id="copy-btn">copy</button>
-      <pre id="pane-brew">brew install cicerothoma/tap/memhogs</pre>
-      <pre id="pane-deb" hidden><span class="c"># download the .deb from the latest release, then</span>
-sudo dpkg -i memhogs_*.deb</pre>
-      <pre id="pane-rpm" hidden>sudo rpm -i memhogs-*.rpm                        <span class="c"># Fedora / RHEL</span>
-sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span></pre>
-      <pre id="pane-go" hidden>go install github.com/cicerothoma/memhogs@latest</pre>
-    </div>
-    <p style="margin-top:14px; color:var(--muted); font-size:.92rem">Tarballs for every platform are on the <a href="https://github.com/cicerothoma/memhogs/releases">releases page</a>.</p>
-    <p style="margin-top:8px; color:var(--muted); font-size:.92rem">On a phone? The <a href="https://github.com/cicerothoma/memhogs-android">Android companion app</a> brings the same per-app breakdown to your pocket via Shizuku.</p>
+    <p style="margin-top:18px; color:var(--muted); font-size:.92rem">Full documentation, with real captured outputs for every command, lives in the <a href="https://github.com/cicerothoma/memhogs#readme">README</a>.</p>
   </div>
 </section>
 
 <section id="memory-guide">
   <div class="wrap">
-    <h2><span class="h-mark">04</span>A short field guide to process memory</h2>
+    <h2><span class="h-mark">05</span>A short field guide to process memory</h2>
     <p class="lede">"How much memory is that app using?" has several honest answers. Here is what the abbreviations mean and why the tools disagree.</p>
 
     <p>A process reserves a large range of addresses (its <b>virtual
@@ -468,7 +487,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 
 <section id="feature-requests">
   <div class="wrap">
-    <h2><span class="h-mark">05</span>Missing a flag?</h2>
+    <h2><span class="h-mark">06</span>Missing a flag?</h2>
     <p class="lede">Feature requests are tracked as GitHub issues, so you can browse what's been asked for and vote with a thumbs-up. This prompt is a shortcut:</p>
     <div class="req">
       <div class="lbl"># type your idea and hit enter to open a prefilled GitHub issue</div>
@@ -490,7 +509,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 
 <footer>
   <div class="wrap">
-    <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://www.collinsthomas.dev/">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a></p>
+    <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://www.collinsthomas.dev/">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a> · <a href="https://github.com/cicerothoma/memhogs#readme">docs</a> · <a href="https://github.com/cicerothoma/memhogs-android">android app</a></p>
     <p style="margin-top:6px; font-size:.8rem; opacity:.65">psst: try typing <span class="mono">hog</span></p>
   </div>
 </footer>
