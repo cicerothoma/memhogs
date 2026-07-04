@@ -1,12 +1,40 @@
 package render
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cicerothoma/memhogs/internal/group"
 	"github.com/cicerothoma/memhogs/internal/proc"
 )
+
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func TestColorWrapsWithoutBreakingAlignment(t *testing.T) {
+	groups := []group.Group{
+		{Name: "Dia", Kind: group.KindApp, Mem: 7 << 30, Procs: []proc.Proc{{PID: 1, RSS: 7 << 30, Name: "Dia"}, {PID: 2, RSS: 1 << 20, Name: "Helper"}}},
+		{Name: "python3", Kind: group.KindStandalone, Mem: 1 << 30, Procs: []proc.Proc{{PID: 3, RSS: 1 << 30, Name: "python3"}}},
+	}
+	var plain, colored strings.Builder
+	opts := Opts{Tree: true, TotalMem: 24 << 30, Metric: "footprint"}
+	Table(&plain, groups, opts)
+	opts.Color = true
+	Table(&colored, groups, opts)
+
+	if !strings.Contains(colored.String(), "\x1b[36mDia\x1b[0m") {
+		t.Error("app group name should be cyan")
+	}
+	if !strings.Contains(colored.String(), "\x1b[32mpython3\x1b[0m") {
+		t.Error("standalone group name should be green")
+	}
+	if !strings.Contains(colored.String(), "\x1b[1;31m") {
+		t.Error("29%% of RAM should flag the %%MEM cell red")
+	}
+	if got := ansiRe.ReplaceAllString(colored.String(), ""); got != plain.String() {
+		t.Errorf("stripping ANSI must yield the uncolored output exactly:\n--- plain ---\n%s--- stripped ---\n%s", plain.String(), got)
+	}
+}
 
 func TestHumanBytes(t *testing.T) {
 	tests := []struct {

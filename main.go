@@ -30,6 +30,7 @@ func main() {
 		watch       = flag.Bool("watch", false, "refresh continuously")
 		interval    = flag.Duration("interval", 2*time.Second, "refresh interval for --watch")
 		rss         = flag.Bool("rss", false, "use RSS (ps/top-comparable) instead of the fair-share metric")
+		noColor     = flag.Bool("no-color", false, "disable colored output")
 	)
 	flag.Usage = usage
 	flag.Parse()
@@ -57,6 +58,7 @@ func main() {
 	if !*tree {
 		opts.MaxMembers = 5
 	}
+	opts.Color = !*noColor && !*jsonOut && os.Getenv("NO_COLOR") == "" && stdoutIsTTY()
 
 	for {
 		if *watch {
@@ -154,6 +156,11 @@ func metricInfo(snapshot []proc.Proc, rss bool) (string, int) {
 		return "pss", fallback
 	}
 	return "footprint", fallback
+}
+
+func stdoutIsTTY() bool {
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 func platformHooks() group.Hooks {

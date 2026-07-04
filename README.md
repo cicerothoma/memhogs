@@ -181,6 +181,14 @@ default. Change it with `--interval`, and combine with a filter or
 memhogs --watch --interval 5s --top 10
 ```
 
+### Colors
+
+When stdout is a terminal, output is colored: memory values in amber,
+app groups in cyan, standalone groups in green, and any entry using 15%
+or more of RAM gets its %MEM cell flagged in red. Colors turn off
+automatically when piping, with `--no-color`, or when the `NO_COLOR`
+environment variable is set. JSON output is never colored.
+
 ### RSS mode
 
 `--rss` switches every view to resident set size, the number `ps` and

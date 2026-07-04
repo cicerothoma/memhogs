@@ -18,6 +18,26 @@ type Opts struct {
 	MemOf      func(proc.Proc) uint64 // per-process metric selector; nil = RSS
 	Metric     string                 // metric name for the footer: "footprint", "pss", or "rss"
 	Fallback   int                    // processes counted via RSS because the metric was unreadable
+	Color      bool                   // wrap output in ANSI colors
+}
+
+// ANSI SGR codes. Strings are padded to column width before wrapping so
+// escape sequences never skew alignment.
+const (
+	cDim   = "2"
+	cMem   = "33"   // amber: memory values
+	cApp   = "36"   // cyan: recognized applications/services
+	cAlone = "32"   // green: standalone groups
+	cHot   = "1;31" // bold red: %MEM worth worrying about
+)
+
+const hotShare = 0.15 // fraction of RAM at which %MEM turns red
+
+func (o Opts) c(code, s string) string {
+	if !o.Color {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
 }
 
 func (o Opts) mem(p proc.Proc) uint64 {
@@ -39,9 +59,15 @@ func Table(w io.Writer, groups []group.Group, o Opts) {
 	if o.Top > 0 && o.Top < len(shown) {
 		shown = shown[:o.Top]
 	}
-	fmt.Fprintf(w, "%10s  %6s  %9s  %s\n", "MEMORY", "%MEM", "PROCESSES", "NAME")
+	fmt.Fprintln(w, o.c(cDim, fmt.Sprintf("%10s  %6s  %9s  %s", "MEMORY", "%MEM", "PROCESSES", "NAME")))
+	indent := "                               " // width of the three number columns
 	for _, g := range shown {
-		fmt.Fprintf(w, "%10s  %6s  %9d  %s\n", HumanBytes(g.Mem), o.pct(g.Mem), len(g.Procs), g.Name)
+		nameCode := cApp
+		if g.Kind == group.KindStandalone {
+			nameCode = cAlone
+		}
+		fmt.Fprintf(w, "%s  %s  %9d  %s\n",
+			o.c(cMem, fmt.Sprintf("%10s", HumanBytes(g.Mem))), o.hotPct(g.Mem), len(g.Procs), o.c(nameCode, g.Name))
 		// A single member would just repeat the group row, so only expand real groups.
 		if o.Tree && len(g.Procs) > 1 {
 			members := g.Procs
@@ -53,14 +79,15 @@ func Table(w io.Writer, groups []group.Group, o Opts) {
 				if i == len(members)-1 && len(members) == len(g.Procs) {
 					branch = "└─"
 				}
-				fmt.Fprintf(w, "%10s  %6s  %9s  %s %s  %s [%d]\n", "", "", "", branch, HumanBytes(o.mem(p)), p.Name, p.PID)
+				fmt.Fprintf(w, "%s%s %s  %s %s\n",
+					indent, o.c(cDim, branch), o.c(cMem, fmt.Sprintf("%9s", HumanBytes(o.mem(p)))), p.Name, o.c(cDim, fmt.Sprintf("[%d]", p.PID)))
 			}
 			if rest := g.Procs[len(members):]; len(rest) > 0 {
 				var restMem uint64
 				for _, p := range rest {
 					restMem += o.mem(p)
 				}
-				fmt.Fprintf(w, "%10s  %6s  %9s  └─ … %d more (%s)\n", "", "", "", len(rest), HumanBytes(restMem))
+				fmt.Fprintf(w, "%s%s\n", indent, o.c(cDim, fmt.Sprintf("└─ … %d more (%s)", len(rest), HumanBytes(restMem))))
 			}
 		}
 	}
@@ -70,8 +97,18 @@ func Table(w io.Writer, groups []group.Group, o Opts) {
 		total += g.Mem
 		nprocs += len(g.Procs)
 	}
-	fmt.Fprintf(w, "\n%d of %d groups · %d processes · total %s%s\n%s\n",
-		len(shown), len(groups), nprocs, HumanBytes(total), ramSuffix(o), metricLine(o))
+	fmt.Fprintf(w, "\n%s\n%s\n",
+		o.c(cDim, fmt.Sprintf("%d of %d groups · %d processes · total %s%s", len(shown), len(groups), nprocs, HumanBytes(total), ramSuffix(o))),
+		o.c(cDim, metricLine(o)))
+}
+
+// hotPct renders the %MEM cell, flagging shares above hotShare in red.
+func (o Opts) hotPct(mem uint64) string {
+	s := fmt.Sprintf("%6s", o.pct(mem))
+	if o.TotalMem > 0 && float64(mem)/float64(o.TotalMem) >= hotShare {
+		return o.c(cHot, s)
+	}
+	return s
 }
 
 func FlatTable(w io.Writer, procs []proc.Proc, o Opts) {
@@ -79,16 +116,18 @@ func FlatTable(w io.Writer, procs []proc.Proc, o Opts) {
 	if o.Top > 0 && o.Top < len(shown) {
 		shown = shown[:o.Top]
 	}
-	fmt.Fprintf(w, "%10s  %6s  %7s  %s\n", "MEMORY", "%MEM", "PID", "NAME")
+	fmt.Fprintln(w, o.c(cDim, fmt.Sprintf("%10s  %6s  %7s  %s", "MEMORY", "%MEM", "PID", "NAME")))
 	for _, p := range shown {
-		fmt.Fprintf(w, "%10s  %6s  %7d  %s\n", HumanBytes(o.mem(p)), o.pct(o.mem(p)), p.PID, p.Name)
+		fmt.Fprintf(w, "%s  %s  %7d  %s\n",
+			o.c(cMem, fmt.Sprintf("%10s", HumanBytes(o.mem(p)))), o.hotPct(o.mem(p)), p.PID, o.c(cApp, p.Name))
 	}
 	var total uint64
 	for _, p := range procs {
 		total += o.mem(p)
 	}
-	fmt.Fprintf(w, "\n%d of %d processes · total %s%s\n%s\n",
-		len(shown), len(procs), HumanBytes(total), ramSuffix(o), metricLine(o))
+	fmt.Fprintf(w, "\n%s\n%s\n",
+		o.c(cDim, fmt.Sprintf("%d of %d processes · total %s%s", len(shown), len(procs), HumanBytes(total), ramSuffix(o))),
+		o.c(cDim, metricLine(o)))
 }
 
 func ramSuffix(o Opts) string {
