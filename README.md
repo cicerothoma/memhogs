@@ -72,6 +72,11 @@ Tarballs for every platform are on the
 If you have Go installed, `go install github.com/cicerothoma/memhogs@latest`
 also works.
 
+For phones there is an Android companion app,
+[memhogs-android](https://github.com/cicerothoma/memhogs-android), with
+the same per-app grouping and the same fair memory metric, using Shizuku
+for shell access.
+
 ## Usage
 
 ### Default view
