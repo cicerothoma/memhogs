@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>memhogs — which apps are eating your memory</title>
+<title>memhogs: which apps are eating your memory</title>
 <meta name="description" content="A command line tool for macOS and Linux that shows which applications are using your memory, with helper processes grouped under the app that owns them.">
 <style>
   :root {
@@ -304,10 +304,34 @@
   @keyframes fall { to { transform: translateY(110vh) rotate(340deg); } }
 
   @media (max-width: 640px) {
-    header { padding: 56px 0 24px; }
-    .term-body { font-size: 10.5px; min-height: 300px; }
+    .wrap { padding: 0 16px; }
+    header { padding: 48px 0 20px; }
+    p.tag { font-size: 1.02rem; }
+    .btn { padding: 9px 15px; font-size: .92rem; }
+    section { padding: 40px 0 16px; }
+    section h2 { font-size: 1.3rem; }
+    .term-tabs button { padding: 8px 11px; font-size: 11.5px; }
+    .term-body { font-size: 10px; min-height: 260px; padding: 12px 12px 14px; }
+    .term-hint { font-size: .78rem; }
     #sim { height: 560px; }
+    .sim-controls { width: 100%; }
+    .sim-controls button { flex: 1; padding: 11px 8px; font-size: 12px; }
+    .chip { font-size: 10px; padding: 3px 6px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+    .g-head { white-space: normal; font-size: 11.5px; }
+    .metric-viz { padding: 14px; }
+    .mv-row { grid-template-columns: 62px 1fr; gap: 4px 10px; }
+    .mv-name { font-size: 11.5px; }
+    .mv-note { font-size: .76rem; }
+    .mv-legend { gap: 10px; font-size: .76rem; }
+    .req { padding: 16px; }
+    .req-line { font-size: 13px; }
+    #req-input { min-width: 140px; font-size: 16px; } /* <16px makes iOS zoom on focus */
+    .pm-pane pre { font-size: 11.5px; }
+    .copy { top: 8px; right: 8px; }
     #gauge { display: none; }
+  }
+  @media (max-width: 400px) {
+    .term-body { font-size: 8.8px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -319,7 +343,7 @@
 
 <header class="wrap">
   <h1 class="logo"><span class="dollar">$</span>memh<span class="muncher"><span class="pac" aria-label="o"></span><span class="bits" aria-hidden="true"><i class="bit"></i><i class="bit"></i><i class="bit"></i></span></span>gs</h1>
-  <p class="tag">Something is eating your memory. <b>Find out who</b> — helpers, renderers, and all.</p>
+  <p class="tag">Something is eating your memory. <b>Find out who</b>: helpers, renderers, and all.</p>
   <div class="actions">
     <a class="btn primary" href="https://github.com/cicerothoma/memhogs">View on GitHub</a>
     <a class="btn" href="https://github.com/cicerothoma/memhogs/releases/latest">Download</a>
@@ -330,7 +354,7 @@
 <div class="wrap">
   <div class="term-tabs" role="tablist" aria-label="memhogs modes" id="tabs"></div>
   <div class="terminal">
-    <div class="bar"><i></i><i></i><i></i><span class="title">memhogs — zsh</span></div>
+    <div class="bar"><i></i><i></i><i></i><span class="title">memhogs · zsh</span></div>
     <div class="term-body" id="term"><noscript>$ memhogs --top 3
     MEMORY    %MEM  PROCESSES  NAME
    7.3 GiB   30.4%         46  Dia
@@ -338,7 +362,7 @@
  708.8 MiB    2.9%          6  Slack
 (enable JavaScript for the interactive demo)</noscript></div>
   </div>
-  <p class="term-hint">↑ this terminal is live — click the flags to run each mode. <span class="mono">--watch</span> actually watches.</p>
+  <p class="term-hint">↑ this terminal is live. Click the flags to run each mode. <span class="mono">--watch</span> actually watches.</p>
 </div>
 
 <section>
@@ -350,7 +374,7 @@
       <button id="btn-mh">what memhogs shows you</button>
     </div>
     <div id="sim" class="scattered" aria-hidden="true"></div>
-    <p class="sim-caption" id="sim-cap">17 processes. Which app owns what? Good luck — one of them is a browser named <b>stable</b>.</p>
+    <p class="sim-caption" id="sim-cap">17 processes. Which app owns what? Good luck: one of them is a browser named <b>stable</b>.</p>
   </div>
 </section>
 
@@ -398,8 +422,8 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 
     <p>A process reserves a large range of addresses (its <b>virtual
     memory</b>), but only some of that is real. Pages it has actually
-    touched sit in RAM; pages it shares with other processes — system
-    libraries, an Electron framework mapped into every renderer — sit in RAM
+    touched sit in RAM; pages it shares with other processes (system
+    libraries, or an Electron framework mapped into every renderer) sit in RAM
     <em>once</em>, no matter how many processes use them; rarely-touched
     pages get <b>compressed</b> in place or <b>swapped</b> to disk. Every
     memory metric is just a choice about which of those pieces to count.</p>
@@ -414,7 +438,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
       <div class="mv-row">
         <span class="mv-name">RSS</span>
         <div class="mv-bar"><i class="sw-priv" style="flex:5"></i><i class="sw-shared" style="flex:4"></i><i class="sw-off" style="flex:2"></i></div>
-        <span class="mv-note">counts shared pages in full — in every process</span>
+        <span class="mv-note">counts shared pages in full, in every process</span>
       </div>
       <div class="mv-row">
         <span class="mv-name">PSS</span>
@@ -431,9 +455,9 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
     <div class="gloss">
       <div class="g-item"><h3>RSS <span>Resident Set Size</span></h3><p>The pages a process has physically in RAM right now. It's what <code>ps</code> and <code>top</code> report. Honest for one process, misleading when you sum: forty helpers sharing one framework each count it again.</p></div>
       <div class="g-item"><h3>PSS <span>Proportional Set Size</span></h3><p>Linux's fair version of RSS. A page shared by ten processes counts one tenth toward each, so PSS values sum to the truth. Read from <code>/proc/&lt;pid&gt;/smaps_rollup</code>.</p></div>
-      <div class="g-item"><h3>footprint <span>physical memory footprint</span></h3><p>macOS's answer, and the number Activity Monitor shows. Counts private and compressed memory but not shared framework code, so summing is fair. This is why an idle app can "grow" — its untouched pages compress, and footprint sees them while RSS forgets them.</p></div>
+      <div class="g-item"><h3>footprint <span>physical memory footprint</span></h3><p>macOS's answer, and the number Activity Monitor shows. Counts private and compressed memory but not shared framework code, so summing is fair. That is why an idle app can appear to grow: its untouched pages compress, and footprint sees them while RSS forgets them.</p></div>
       <div class="g-item"><h3>%MEM</h3><p>A process's (or in memhogs, a whole app's) share of the machine's physical RAM. The column that answers "is 700 MiB a lot on this box?"</p></div>
-      <div class="g-item"><h3>swap &amp; compression</h3><p>Under pressure the OS evicts cold pages — to a compressed store in RAM (fast) or to disk (slow). Those pages leave RSS entirely, which is how a leaking process can look like it's shrinking.</p></div>
+      <div class="g-item"><h3>swap &amp; compression</h3><p>Under pressure the OS evicts cold pages, either to a compressed store in RAM (fast) or to disk (slow). Those pages leave RSS entirely, which is how a leaking process can look like it's shrinking.</p></div>
       <div class="g-item"><h3>virtual size <span>VSZ</span></h3><p>Address space the process has <em>reserved</em>, most of it never touched. Browsers reserve terabytes. Ignore this column; everyone else does.</p></div>
     </div>
 
@@ -446,7 +470,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
     <h2><span class="h-mark">05</span>Missing a flag?</h2>
     <p class="lede">Feature requests are tracked as GitHub issues, so you can browse what's been asked for and vote with a thumbs-up. This prompt is a shortcut:</p>
     <div class="req">
-      <div class="lbl"># type your idea and hit enter — opens a prefilled GitHub issue</div>
+      <div class="lbl"># type your idea and hit enter to open a prefilled GitHub issue</div>
       <div class="req-line">
         <span class="p">$</span><span class="cmd">memhogs --request&nbsp;</span><span class="q">"</span><input id="req-input" type="text" maxlength="120" placeholder="a --containers flag that groups by docker container" aria-label="describe your feature request"><span class="q">"</span>
       </div>
@@ -466,7 +490,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
 <footer>
   <div class="wrap">
     <p><span class="exit">exit 0</span> · MIT licensed · built by <a href="https://www.collinsthomas.dev/">Collins Thomas</a> · <a href="https://github.com/cicerothoma/memhogs">source</a></p>
-    <p style="margin-top:6px; font-size:.8rem; opacity:.65">psst — try typing <span class="mono">hog</span></p>
+    <p style="margin-top:6px; font-size:.8rem; opacity:.65">psst: try typing <span class="mono">hog</span></p>
   </div>
 </footer>
 
@@ -651,7 +675,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
   var btnPs = document.getElementById("btn-ps"), btnMh = document.getElementById("btn-mh");
   var SIMG = [
     { name: "Dia", mem: "7.3 GiB", color: "#7cb8ff", chips: ["Dia", "Browser Helper", "Browser Helper (Renderer)", "Browser Helper (Renderer)", "Browser Helper (GPU)"] },
-    { name: "python3", mem: "4.0 GiB", color: "#4ade80", note: "yours — launched from a shell", chips: ["python3", "python3 (worker)"] },
+    { name: "python3", mem: "4.0 GiB", color: "#4ade80", note: "yours, launched from a shell", chips: ["python3", "python3 (worker)"] },
     { name: "VS Code", mem: "2.1 GiB", color: "#c084fc", chips: ["Code", "Code Helper (Plugin)", "Code Helper (Renderer)", "Code Helper (Plugin)"] },
     { name: "Slack", mem: "709 MiB", color: "#fbbf24", chips: ["Slack", "Slack Helper (Renderer)", "Slack Helper"] },
     { name: "Warp", mem: "413 MiB", color: "#f87171", chips: ["stable", "stable", "-zsh"] }
@@ -700,6 +724,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
       var x = 16 + col * colW + 4;
       var y = 22 + rowBase;
       headEls[gi].style.transform = "translate(" + x + "px," + y + "px)";
+      headEls[gi].style.maxWidth = narrow ? (colW - 14) + "px" : "";
       var cy = y + (SIMG[gi].note ? 44 : 30);
       chipEls.forEach(function (c) {
         if (+c.dataset.g !== gi) return;
@@ -718,7 +743,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
       cap.innerHTML = "5 owners, sorted and totalled. <b>stable</b> turned out to be Warp, and your python job didn't get blamed on the terminal.";
     } else {
       layoutScattered();
-      cap.innerHTML = "17 processes. Which app owns what? Good luck — one of them is a browser named <b>stable</b>.";
+      cap.innerHTML = "17 processes. Which app owns what? Good luck: one of them is a browser named <b>stable</b>.";
     }
     if (user) autoPlayed = true;
   }
