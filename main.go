@@ -33,14 +33,13 @@ func main() {
 		noColor     = flag.Bool("no-color", false, "disable colored output")
 	)
 	flag.Usage = usage
-	flag.Parse()
+	filter := strings.ToLower(strings.Join(parseFlagsAnywhere(flag.CommandLine, os.Args[1:]), " "))
 
 	if *showVersion {
 		fmt.Println("memhogs " + version)
 		return
 	}
 
-	filter := strings.ToLower(strings.Join(flag.Args(), " "))
 	if *flat && *tree {
 		fatal("--flat and --tree are mutually exclusive")
 	}
@@ -120,6 +119,37 @@ func run(hooks group.Hooks, opts render.Opts, filter string, flat, jsonOut, rss 
 	return nil
 }
 
+// parseFlagsAnywhere parses flags wherever they appear on the command line
+// and returns the positional arguments, so `memhogs chrome --flat` means the
+// same as `memhogs --flat chrome`. The flag package alone stops at the first
+// positional argument and would silently fold `--flat` into the filter. A
+// literal "--" still marks everything after it as positional.
+func parseFlagsAnywhere(fs *flag.FlagSet, args []string) []string {
+	var tail []string
+	for i, a := range args {
+		if a == "--" {
+			tail = args[i+1:]
+			args = args[:i]
+			break
+		}
+	}
+	var positionals []string
+	for len(args) > 0 {
+		fs.Parse(args)
+		rest := fs.Args()
+		i := 0
+		for i < len(rest) && (rest[i] == "-" || !strings.HasPrefix(rest[i], "-")) {
+			i++
+		}
+		positionals = append(positionals, rest[:i]...)
+		if i == len(rest) {
+			break
+		}
+		args = rest[i:]
+	}
+	return append(positionals, tail...)
+}
+
 func matches(filter string, fields ...string) bool {
 	if filter == "" {
 		return true
@@ -185,6 +215,7 @@ shows all of them, --compact shows one row per group.
 usage: memhogs [flags] [filter]
 
   filter          only show groups whose name contains this substring
+                  (flags may come before or after it)
 
 flags:
 `)
