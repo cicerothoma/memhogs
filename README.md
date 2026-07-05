@@ -178,13 +178,21 @@ $ memhogs --json --top 1 messages
 
 ### Live view
 
-`--watch` clears the screen and reprints on an interval, two seconds by
-default. Change it with `--interval`, and combine with a filter or
-`--top` to keep an eye on one thing:
+`--watch` opens a full-screen live view, like `top`: it repaints in
+place on an interval (two seconds by default), fits itself to the
+window, and never scrolls anything into your terminal's history. The
+footer says how many groups the window is hiding; enlarge it or use
+`--top` to choose. Ctrl-c restores your terminal exactly as it was and
+prints one last snapshot so you keep a copy. Change the pace with
+`--interval`, and combine with a filter to keep an eye on one thing:
 
 ```
-memhogs --watch --interval 5s --top 10
+memhogs --watch --interval 5s chrome
 ```
+
+When stdout is not a terminal, `--watch` appends plain timestamped
+frames instead, which makes it a cheap memory logger:
+`memhogs --watch --interval 60s --compact >> mem.log`.
 
 ### Colors
 

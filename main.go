@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -27,7 +28,7 @@ func main() {
 		jsonOut     = flag.Bool("json", false, "emit JSON")
 		tree        = flag.Bool("tree", false, "expand every member process (default shows top 5 per group)")
 		compact     = flag.Bool("compact", false, "one row per group, no member processes")
-		watch       = flag.Bool("watch", false, "refresh continuously")
+		watch       = flag.Bool("watch", false, "full-screen live view that refreshes in place")
 		interval    = flag.Duration("interval", 2*time.Second, "refresh interval for --watch")
 		rss         = flag.Bool("rss", false, "use RSS (ps/top-comparable) instead of the fair-share metric")
 		noColor     = flag.Bool("no-color", false, "disable colored output")
@@ -59,22 +60,18 @@ func main() {
 	}
 	opts.Color = !*noColor && !*jsonOut && os.Getenv("NO_COLOR") == "" && stdoutIsTTY()
 
-	for {
-		if *watch {
-			fmt.Print("\x1b[H\x1b[2J") // clear screen, cursor home
-			fmt.Printf("memhogs · %s · every %s (ctrl-c to quit)\n\n", time.Now().Format("15:04:05"), *interval)
-		}
-		if err := run(hooks, opts, filter, *flat, *jsonOut, *rss); err != nil {
-			fatal(err.Error())
-		}
-		if !*watch {
-			return
-		}
-		time.Sleep(*interval)
+	if *watch {
+		watchLoop(hooks, opts, filter, *flat, *rss, *interval)
+		return
+	}
+	if err := run(os.Stdout, hooks, opts, filter, *flat, *jsonOut, *rss, 0); err != nil {
+		fatal(err.Error())
 	}
 }
 
-func run(hooks group.Hooks, opts render.Opts, filter string, flat, jsonOut, rss bool) error {
+// run takes one snapshot and renders it to w. rowBudget > 0 caps the output
+// at that many lines by lowering the effective --top; 0 means unlimited.
+func run(w io.Writer, hooks group.Hooks, opts render.Opts, filter string, flat, jsonOut, rss bool, rowBudget int) error {
 	snapshot, err := proc.Snapshot()
 	if err != nil {
 		return fmt.Errorf("reading processes: %w", err)
@@ -95,10 +92,13 @@ func run(hooks group.Hooks, opts render.Opts, filter string, flat, jsonOut, rss 
 			procs = append(procs, p)
 		}
 		sort.Slice(procs, func(i, j int) bool { return memOf(procs[i]) > memOf(procs[j]) })
-		if jsonOut {
-			return render.JSONFlat(os.Stdout, procs, opts)
+		if fit := rowBudget - tableChrome; rowBudget > 0 {
+			opts.Top = lowerTop(opts.Top, max(fit, 1))
 		}
-		render.FlatTable(os.Stdout, procs, opts)
+		if jsonOut {
+			return render.JSONFlat(w, procs, opts)
+		}
+		render.FlatTable(w, procs, opts)
 		return nil
 	}
 
@@ -112,11 +112,26 @@ func run(hooks group.Hooks, opts render.Opts, filter string, flat, jsonOut, rss 
 		}
 		groups = kept
 	}
-	if jsonOut {
-		return render.JSON(os.Stdout, groups, opts)
+	if rowBudget > 0 {
+		opts.Top = lowerTop(opts.Top, fitTop(groups, opts, rowBudget-tableChrome))
 	}
-	render.Table(os.Stdout, groups, opts)
+	if jsonOut {
+		return render.JSON(w, groups, opts)
+	}
+	render.Table(w, groups, opts)
 	return nil
+}
+
+// tableChrome is the fixed rows around the table body: the column header
+// plus the blank line and two-line summary footer.
+const tableChrome = 4
+
+// lowerTop tightens a --top value (0 = unlimited) to at most fit.
+func lowerTop(top, fit int) int {
+	if top == 0 || fit < top {
+		return fit
+	}
+	return top
 }
 
 // parseFlagsAnywhere parses flags wherever they appear on the command line
