@@ -50,7 +50,7 @@ Works on macOS and Linux, amd64 and arm64.
 Prebuilt binaries, no Go required:
 
 ```sh
-# Homebrew (macOS and Linux)
+# Homebrew (macOS)
 brew install cicerothoma/tap/memhogs
 
 # or add the tap once, then use the short name from then on

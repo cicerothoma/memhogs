@@ -28,15 +28,24 @@ nfpms:
     description: Apps and services by memory use, grouped by process tree.
     license: MIT
 
-brews:
+# Casks replaced the deprecated generated formulas (gone in goreleaser
+# v2.16). Casks are macOS-only, so Linux brew is no longer an install path;
+# Linux users get the deb/rpm/apk or tarball. The binaries are not signed or
+# notarized, so the post-install hook strips Gatekeeper's quarantine flag —
+# without it macOS refuses to run the downloaded binary.
+homebrew_casks:
   - repository:
       owner: cicerothoma
       name: homebrew-tap
     homepage: https://github.com/cicerothoma/memhogs
     description: Apps and services by memory use, grouped by process tree.
     license: MIT
-    test: |
-      system "#{bin}/memhogs", "--version"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/memhogs"]
+          end
 
 changelog:
   use: github-native
