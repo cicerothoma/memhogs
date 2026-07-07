@@ -1,0 +1,22 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141926"/>
+      <stop offset="1" stop-color="#0a0c12"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded app tile -->
+  <rect width="240" height="240" rx="52" fill="url(#bg)"/>
+
+  <!-- terminal prompt: amber chevron + cursor block -->
+  <path d="M 42 42 L 64 61 L 42 80" fill="none" stroke="#E5A24A"
+        stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="78" y="48" width="18" height="26" rx="3" fill="#E5A24A"/>
+
+  <!-- ranked memory bars (top one flagged red = the hog) -->
+  <rect x="42" y="104" width="156" height="24" rx="6" fill="#E0524A"/>
+  <rect x="42" y="139" width="124" height="24" rx="6" fill="#E5A24A"/>
+  <rect x="42" y="174" width="94"  height="24" rx="6" fill="#4EC9B0"/>
+  <rect x="42" y="209" width="66"  height="24" rx="6" fill="#6AAB73"/>
+</svg>
