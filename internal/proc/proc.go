@@ -10,6 +10,9 @@ type Proc struct {
 	Path string // executable path; empty if unreadable
 	Name string // short process name (basename of Path when available)
 	Unit string // Linux: innermost cgroup component (e.g. "app-firefox-1234.scope"); empty elsewhere
+	// UserUnit is set on Linux when the process lives under a per-user systemd
+	// manager (user@UID.service), i.e. its Unit is a `--user` unit.
+	UserUnit bool
 }
 
 // MemRSS selects the RSS metric for a process.

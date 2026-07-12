@@ -21,6 +21,13 @@ import (
 var version = "dev"
 
 func main() {
+	// `memhogs stop <name>` (alias `kill`) is a subcommand, not a flag: it prints
+	// how to stop the matching group(s) and never runs anything itself.
+	if len(os.Args) > 1 && (os.Args[1] == "stop" || os.Args[1] == "kill") {
+		stopCommand(os.Args[2:])
+		return
+	}
+
 	var (
 		showVersion = flag.Bool("version", false, "print version and exit")
 		top         = flag.Int("top", 0, "show only the top N entries")
@@ -31,6 +38,7 @@ func main() {
 		watch       = flag.Bool("watch", false, "full-screen live view that refreshes in place")
 		interval    = flag.Duration("interval", 2*time.Second, "refresh interval for --watch")
 		rss         = flag.Bool("rss", false, "use RSS (ps/top-comparable) instead of the fair-share metric")
+		stopHint    = flag.Bool("stop-hint", false, "under each group, show the command to stop it")
 		noColor     = flag.Bool("no-color", false, "disable colored output")
 	)
 	flag.Usage = usage
@@ -50,6 +58,12 @@ func main() {
 	if *watch && *jsonOut {
 		fatal("--watch and --json are mutually exclusive")
 	}
+	if *stopHint && *flat {
+		fatal("--stop-hint applies to grouped views, not --flat (a flat row is just kill <pid>)")
+	}
+	if *stopHint && *watch {
+		fatal("--stop-hint and --watch are mutually exclusive")
+	}
 
 	hooks := platformHooks()
 	// Default view: tree capped at 5 members per group. --tree lifts the
@@ -59,6 +73,9 @@ func main() {
 		opts.MaxMembers = 5
 	}
 	opts.Color = !*noColor && !*jsonOut && os.Getenv("NO_COLOR") == "" && stdoutIsTTY()
+	if *stopHint {
+		opts.StopCmd = func(g group.Group) string { return group.StopRecipe(g, runtime.GOOS).Stop }
+	}
 
 	if *watch {
 		watchLoop(hooks, opts, filter, *flat, *rss, *interval)
@@ -165,6 +182,41 @@ func parseFlagsAnywhere(fs *flag.FlagSet, args []string) []string {
 	return append(positionals, tail...)
 }
 
+// stopCommand implements `memhogs stop <name>` (alias `kill`): it finds the
+// groups whose name matches and prints the command(s) to stop each. It is
+// deliberately read-only — memhogs shows you the command; you decide whether
+// to run it.
+func stopCommand(args []string) {
+	filter := strings.ToLower(strings.Join(args, " "))
+	if filter == "" {
+		fatal("usage: memhogs stop <name>   (name of the app/service to stop)")
+	}
+	snapshot, err := proc.Snapshot()
+	if err != nil {
+		fatal("reading processes: " + err.Error())
+	}
+	groups := group.Build(snapshot, platformHooks(), proc.MemFair)
+	var matched []group.Group
+	for _, g := range groups {
+		if matches(filter, g.Name) {
+			matched = append(matched, g)
+		}
+	}
+	if len(matched) == 0 {
+		fatal(fmt.Sprintf("no group matches %q — run `memhogs %s` to see the names", filter, filter))
+	}
+	for _, g := range matched {
+		r := group.StopRecipe(g, runtime.GOOS)
+		fmt.Printf("%s — %d process(es), %s\n", g.Name, len(g.Procs), render.HumanBytes(g.Mem))
+		fmt.Printf("  stop:  %s\n", r.Stop)
+		if r.Force != r.Stop {
+			fmt.Printf("  force: %s\n", r.Force)
+		}
+		fmt.Println()
+	}
+	fmt.Println("memhogs only prints these — copy the one you want to run it.")
+}
+
 func matches(filter string, fields ...string) bool {
 	if filter == "" {
 		return true
@@ -228,9 +280,13 @@ By default each group expands to its 5 biggest member processes; --tree
 shows all of them, --compact shows one row per group.
 
 usage: memhogs [flags] [filter]
+       memhogs stop <name>     show how to stop a matching app/service
 
   filter          only show groups whose name contains this substring
                   (flags may come before or after it)
+
+The stop subcommand (alias: kill) and --stop-hint only ever print a stop command
+(systemctl stop / osascript quit / kill); memhogs never terminates anything.
 
 flags:
 `)

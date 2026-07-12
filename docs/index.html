@@ -439,6 +439,7 @@ sudo apk add --allow-untrusted memhogs_*.apk     <span class="c"># Alpine</span>
       <div class="g-item"><h3><code>memhogs --watch</code></h3><p>Full-screen live view, like <code>top</code>: repaints in place, fits your window, restores the terminal on ctrl-c. <code>--interval 5s</code> changes the pace.</p></div>
       <div class="g-item"><h3><code>memhogs --json</code></h3><p>The full structure with raw byte counts, for scripts, dashboards, and alerts.</p></div>
       <div class="g-item"><h3><code>memhogs --rss</code></h3><p>Switches to the number <code>ps</code> and <code>top</code> report, for comparing against those tools.</p></div>
+      <div class="g-item"><h3><code>memhogs stop &lt;name&gt;</code></h3><p>Prints how to stop a hog — <code>systemctl stop</code>, <code>osascript</code> quit, or a <code>kill</code> of the tree's roots. Show-only; memhogs never terminates anything. <code>--stop-hint</code> shows it inline under each group.</p></div>
     </div>
     <p style="margin-top:18px; color:var(--muted); font-size:.92rem">Full documentation, with real captured outputs for every command, lives in the <a href="https://github.com/cicerothoma/memhogs#readme">README</a>.</p>
   </div>

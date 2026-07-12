@@ -11,14 +11,15 @@ import (
 )
 
 type Opts struct {
-	Top        int                    // show only the first N groups/processes; 0 = all
-	Tree       bool                   // list member processes under multi-process groups
-	MaxMembers int                    // member rows per group before folding into "… N more"; 0 = all
-	TotalMem   uint64                 // physical RAM in bytes; enables the %MEM column when > 0
-	MemOf      func(proc.Proc) uint64 // per-process metric selector; nil = RSS
-	Metric     string                 // metric name for the footer: "footprint", "pss", or "rss"
-	Fallback   int                    // processes counted via RSS because the metric was unreadable
-	Color      bool                   // wrap output in ANSI colors
+	Top        int                      // show only the first N groups/processes; 0 = all
+	Tree       bool                     // list member processes under multi-process groups
+	MaxMembers int                      // member rows per group before folding into "… N more"; 0 = all
+	TotalMem   uint64                   // physical RAM in bytes; enables the %MEM column when > 0
+	MemOf      func(proc.Proc) uint64   // per-process metric selector; nil = RSS
+	Metric     string                   // metric name for the footer: "footprint", "pss", or "rss"
+	Fallback   int                      // processes counted via RSS because the metric was unreadable
+	Color      bool                     // wrap output in ANSI colors
+	StopCmd    func(group.Group) string // if set, print/emit a stop command per group
 }
 
 // ANSI SGR codes. Strings are padded to column width before wrapping so
@@ -88,6 +89,11 @@ func Table(w io.Writer, groups []group.Group, o Opts) {
 					restMem += o.mem(p)
 				}
 				fmt.Fprintf(w, "%s%s\n", indent, o.c(cDim, fmt.Sprintf("└─ … %d more (%s)", len(rest), HumanBytes(restMem))))
+			}
+		}
+		if o.StopCmd != nil {
+			if cmd := o.StopCmd(g); cmd != "" {
+				fmt.Fprintf(w, "%s%s\n", indent, o.c(cDim, "stop ▸ "+cmd))
 			}
 		}
 	}
@@ -171,6 +177,7 @@ type jsonGroup struct {
 	MemBytes   uint64     `json:"mem_bytes"`
 	Mem        string     `json:"mem"`
 	PercentRAM float64    `json:"percent_of_ram,omitempty"`
+	Stop       string     `json:"stop,omitempty"`
 	Procs      []jsonProc `json:"procs"`
 }
 
@@ -191,6 +198,9 @@ func JSON(w io.Writer, groups []group.Group, o Opts) error {
 		jg := jsonGroup{Name: g.Name, Kind: g.Kind.String(), MemBytes: g.Mem, Mem: HumanBytes(g.Mem), Procs: make([]jsonProc, len(g.Procs))}
 		if o.TotalMem > 0 {
 			jg.PercentRAM = roundPct(float64(g.Mem) / float64(o.TotalMem) * 100)
+		}
+		if o.StopCmd != nil {
+			jg.Stop = o.StopCmd(g)
 		}
 		for j, p := range g.Procs {
 			jg.Procs[j] = o.jsonProc(p)

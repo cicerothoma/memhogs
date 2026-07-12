@@ -194,6 +194,47 @@ When stdout is not a terminal, `--watch` appends plain timestamped
 frames instead, which makes it a cheap memory logger:
 `memhogs --watch --interval 60s --compact >> mem.log`.
 
+### Stopping a hog
+
+![memhogs stop: a stop command under each group, and the recipe for one app](docs/stop.gif)
+
+memhogs never kills anything itself — but once you've spotted the culprit it
+tells you exactly how to stop it. `memhogs stop <name>` (alias: `kill`) prints
+the right command for each matching group:
+
+```
+$ memhogs stop dia
+Dia — 45 process(es), 7.2 GiB
+  stop:  osascript -e 'quit app "Dia"'
+  force: kill -9 69734
+
+memhogs only prints these — copy the one you want to run it.
+```
+
+The command fits the group. A macOS app is quit gracefully with `osascript` so
+it can save first. A systemd service is stopped with `systemctl stop` (with
+`--user` for user services), so a `Restart=always` daemon doesn't just respawn
+the way a bare `kill` would let it. Anything else is a plain `kill` of the
+group's *root* processes — the ones whose parent is outside the group — which
+takes the whole tree down with it, no blind `killall` required. `force:` is the
+hard fallback for when the graceful stop doesn't take.
+
+To keep the command in view while browsing, add `--stop-hint` to any grouped
+view:
+
+```
+$ memhogs --stop-hint --compact --top 3
+    MEMORY    %MEM  PROCESSES  NAME
+  10.1 GiB   42.0%         82  Visual Studio Code
+                               stop ▸ osascript -e 'quit app "Visual Studio Code"'
+   7.2 GiB   30.0%         45  Dia
+                               stop ▸ osascript -e 'quit app "Dia"'
+ 731.7 MiB    3.0%         11  Warp
+                               stop ▸ osascript -e 'quit app "Warp"'
+```
+
+`--json --stop-hint` adds a `"stop"` field to each group for scripting.
+
 ### Colors
 
 When stdout is a terminal, output is colored: memory values in amber,

@@ -40,3 +40,22 @@ func TestCgroupUnit(t *testing.T) {
 		}
 	}
 }
+
+func TestCgroupUserScoped(t *testing.T) {
+	tests := []struct {
+		cg   string
+		want bool
+	}{
+		{"0::/user.slice/user-1000.slice/user@1000.service/app.slice/pipewire.service\n", true},
+		{"0::/system.slice/docker.service\n", false},
+		{"0::/user.slice/user-1000.slice/session-2.scope\n", false},                   // logged in, but not a --user unit
+		{"12:pids:/user.slice/user-1000.slice/user@1000.service/foo.service\n", true}, // v1 fallback
+		{"0::/\n", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := cgroupUserScoped(tt.cg); got != tt.want {
+			t.Errorf("cgroupUserScoped(%q) = %v, want %v", tt.cg, got, tt.want)
+		}
+	}
+}

@@ -53,6 +53,25 @@ func cgroupUnit(cg string) string {
 	return filepath.Base(path)
 }
 
+// cgroupUserScoped reports whether the cgroup v2 path runs under a per-user
+// systemd manager (user@UID.service), which means its units are `--user` units
+// stopped with `systemctl --user`. System units live under system.slice.
+func cgroupUserScoped(cg string) bool {
+	for line := range strings.Lines(cg) {
+		line = strings.TrimSpace(line)
+		rest, found := strings.CutPrefix(line, "0::")
+		if !found {
+			if parts := strings.SplitN(line, ":", 3); len(parts) == 3 {
+				rest = parts[2]
+			}
+		}
+		if strings.Contains(rest, "/user@") {
+			return true
+		}
+	}
+	return false
+}
+
 // parsePss extracts the proportional set size in bytes from
 // /proc/pid/smaps_rollup content ("Pss:            123456 kB").
 func parsePss(rollup string) uint64 {
