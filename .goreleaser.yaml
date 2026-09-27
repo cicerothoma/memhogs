@@ -40,12 +40,15 @@ homebrew_casks:
     homepage: https://github.com/cicerothoma/memhogs
     description: Apps and services by memory use, grouped by process tree.
     license: MIT
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/memhogs"]
-          end
+    # Homebrew 7 deprecates the `postflight` block that `hooks.post.install`
+    # generates, so emit a declarative `postflight_steps` stanza instead.
+    # Switch back to hooks once goreleaser/goreleaser#6873 ships.
+    custom_block: |
+      on_macos do
+        postflight_steps do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "memhogs"], chdir: "."
+        end
+      end
 
 changelog:
   use: github-native
